@@ -6,7 +6,7 @@ The alternative to using a file like this is modifying LLVM source
 more aggressively directly.
 */
 #include "../lib/Target/RISCV/RISCVISelDAGToDAG.h"
-#include "../lib/Target/RISCV/RISCVMacroFusion.h"
+// #include "../lib/Target/RISCV/RISCVMacroFusion.h"
 #include "../lib/Target/RISCV/RISCVTargetMachine.h"
 #include "PatternGen.hpp"
 #include "llvm/Analysis/CGSCCPassManager.h"
@@ -113,20 +113,34 @@ public:
   ScheduleDAGInstrs *
   createMachineScheduler(MachineSchedContext *C) const override {
     const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
-    if (ST.hasMacroFusion()) {
-      ScheduleDAGMILive *DAG = createGenericSchedLive(C);
-      DAG->addMutation(createRISCVMacroFusionDAGMutation());
-      return DAG;
+    // if (ST.hasMacroFusion()) {
+    //   ScheduleDAGMILive *DAG = createGenericSchedLive(C);
+    //   DAG->addMutation(createRISCVMacroFusionDAGMutation());
+    //   return DAG;
+    // }
+    // return nullptr;
+    ScheduleDAGMILive *DAG = nullptr;
+    const auto &MacroFusions = ST.getMacroFusions();
+    if (!MacroFusions.empty()) {
+      DAG = DAG ? DAG : createGenericSchedLive(C);
+      DAG->addMutation(createMacroFusionDAGMutation(MacroFusions));
     }
-    return nullptr;
+    return DAG;
   }
 
   ScheduleDAGInstrs *
   createPostMachineScheduler(MachineSchedContext *C) const override {
     const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
-    if (ST.hasMacroFusion()) {
+    // if (ST.hasMacroFusion()) {
+    //   ScheduleDAGMI *DAG = createGenericSchedPostRA(C);
+    //   DAG->addMutation(createRISCVMacroFusionDAGMutation());
+    //   return DAG;
+    // }
+    // return nullptr;
+    const auto &MacroFusions = ST.getMacroFusions();
+    if (!MacroFusions.empty()) {
       ScheduleDAGMI *DAG = createGenericSchedPostRA(C);
-      DAG->addMutation(createRISCVMacroFusionDAGMutation());
+      DAG->addMutation(createMacroFusionDAGMutation(MacroFusions));
       return DAG;
     }
     return nullptr;
