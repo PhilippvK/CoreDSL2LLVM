@@ -579,6 +579,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     auto Node =
         std::make_unique<RegisterNode>(MRI.getType(Cur.getOperand(0).getReg()),
                                        AddrLI.asMCReg().id() - 41 - 11, 0, 2);
+                                       // AddrLI.asMCReg().id() - 41 - 10, 0, 2);
 
     return std::make_pair(SUCCESS, std::move(Node));
   }
