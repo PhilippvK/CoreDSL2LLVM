@@ -605,10 +605,10 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     if (!Reg.isPhysical())
       return std::make_pair(FORMAT_IMM, nullptr);
 
-    uint Id = Reg.asMCReg().id() - 41 - 10;
+    uint Id = Reg.asMCReg().id() - 41 - 11;
     if (!(Id >= 3 && Id <= 4))
       return std::make_pair(FORMAT_IMM, nullptr);
-    
+
     return std::make_pair(
         SUCCESS, std::make_unique<RegisterNode>(
                      MRI.getType(Cur.getOperand(0).getReg()), Id, 0, -1));
