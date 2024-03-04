@@ -86,7 +86,7 @@ static void pop_var_scope()
         if (vstack.empty())
             variables.erase(vname);
     }
-    
+
     scopeDepth--;
 }
 
@@ -158,7 +158,7 @@ static void fit_to_size(Value& v, llvm::IRBuilder<>& build)
     auto& ctx = build.getContext();
     // To give LLVM an easier time, generate
     // expressions with power-of-two bit widths
-    
+
     int bitWidth2 = ceil_to_pow2(v.bitWidth);
     if (bitWidth2 > 32) bitWidth2 = 32;
     llvm::Type* newType = llvm::Type::getIntNTy(ctx, bitWidth2);
@@ -175,16 +175,16 @@ Value gen_subscript(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& bu
 {
     auto& ctx = func->getContext();
     Value upper = ParseExpression(ts, func, build);
-    
+
     int len = 0;
     Value lower;
-    
+
     if (pop_cur_if(ts, Colon))
     {
         lower = ParseExpression(ts, func, build);
         if (!llvm::isa<llvm::ConstantInt>(lower.ll) || !llvm::isa<llvm::ConstantInt>(upper.ll))
             not_implemented(ts);
-        len = llvm::cast<llvm::ConstantInt>(upper.ll)->getLimitedValue() - 
+        len = llvm::cast<llvm::ConstantInt>(upper.ll)->getLimitedValue() -
             llvm::cast<llvm::ConstantInt>(lower.ll)->getLimitedValue() + 1;
     }
     else if (pop_cur_if(ts, PlusColon))
@@ -204,7 +204,7 @@ Value gen_subscript(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& bu
         len = 1;
     }
     pop_cur(ts, ABrClose);
-    
+
     for (auto& v : {&lower, &upper})
     {
         promote_lvalue(build, *v);
@@ -215,7 +215,7 @@ Value gen_subscript(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& bu
             fit_to_size(lower, build);
         }
     }
-    
+
     if (left.isLValue && (len == 8 || len == 16 || len == 32) && left.bitWidth == 32)
     {
         if (auto asConst = llvm::dyn_cast<llvm::ConstantInt>(lower.ll))
@@ -224,7 +224,7 @@ Value gen_subscript(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& bu
 
         auto offset = build.CreateUDiv(lower.ll, llvm::ConstantInt::get(lower.ll->getType(), len));
         offset = build.CreateAnd(offset, llvm::ConstantInt::get(lower.ll->getType(), 3));
-        
+
         auto llptr = build.CreateGEP(llvm::Type::getIntNTy(ctx, len), left.ll,
                                      {offset});
 
@@ -238,7 +238,7 @@ Value gen_subscript(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& bu
 
         auto ec = llvm::ElementCount::getFixed(32 / len);
         left.ll = build.CreateBitCast(left.ll, llvm::VectorType::get(llvm::Type::getIntNTy(ctx, len), ec));
-        
+
         upper.bitWidth = left.bitWidth;
         fit_to_size(upper, build);
         auto* idx = build.CreateUDiv(upper.ll, llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), len));
@@ -258,11 +258,11 @@ Value gen_subscript(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& bu
 
         left.ll = build.CreateLShr(left.ll, lower.ll);
         int llLen = upper.ll->getType()->getIntegerBitWidth();
-        llvm::Value* mask = (len == llLen) ? llvm::ConstantInt::get(upper.ll->getType(), 0) : 
+        llvm::Value* mask = (len == llLen) ? llvm::ConstantInt::get(upper.ll->getType(), 0) :
             build.CreateShl(llvm::ConstantInt::get(upper.ll->getType(), 1), len);
         mask = build.CreateSub(mask, llvm::ConstantInt::get(upper.ll->getType(), 1));
         left.ll = build.CreateAnd(left.ll, mask);
-        
+
         left.bitWidth = len;
         fit_to_size(left, build);
     }
@@ -472,22 +472,22 @@ Value gen_ternary(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& buil
     llvm::BasicBlock* blockTrue = llvm::BasicBlock::Create(ctx, "true", func);
     llvm::BasicBlock* blockFalse = llvm::BasicBlock::Create(ctx, "false", func);
     llvm::BasicBlock* blockTerm = llvm::BasicBlock::Create(ctx, "select", func);
-    
+
     promote_lvalue(build, left);
 
     auto cond = build.CreateICmpNE(left.ll, llvm::ConstantInt::get(left.ll->getType(), 0));
     build.CreateCondBr(cond, blockTrue, blockFalse);
-    
+
     build.SetInsertPoint(blockTrue);
     auto valTrue = ParseExpression(ts, func, build);
     promote_lvalue(build, valTrue);
-    
+
     pop_cur(ts, Colon);
 
     build.SetInsertPoint(blockFalse);
     auto valFalse = ParseExpression(ts, func, build);
     promote_lvalue(build, valFalse);
-    
+
 
     if (valTrue.ll->getType() != valFalse.ll->getType())
     {
@@ -510,7 +510,7 @@ Value gen_ternary(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& buil
     build.CreateBr(blockTerm);
 
     build.SetInsertPoint(blockTerm);
-    
+
     auto retval = build.CreatePHI(valTrue.ll->getType(), 2);
     retval->addIncoming(valTrue.ll, blockTrue);
     retval->addIncoming(valFalse.ll, blockFalse);
@@ -547,9 +547,9 @@ Value gen_logical(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& buil
 
     build.CreateBr(blockPost);
     blockEvalRHS = build.GetInsertBlock();
-    
+
     build.SetInsertPoint(blockPost);
-    
+
     auto phi = build.CreatePHI(i1, 2);
     phi->addIncoming(valRightBool, blockEvalRHS);
     phi->addIncoming(llvm::ConstantInt::get(i1, (op == LogicalOR) ? 1 : 0), blockPre);
@@ -572,7 +572,7 @@ Value gen_concat(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build
         fit_to_size(right, build);
         right.isSigned = rightSigned;
     }
-    
+
     left.ll = build.CreateOr(left.ll, right.ll);
     return left;
 }
@@ -583,7 +583,7 @@ Value gen_inc(bool isPost, TokenStream& ts, llvm::Function* func, llvm::IRBuilde
 
     if (!left.isLValue)
         error("cannot assign rvalue", ts);
-    
+
     auto pre = build.CreateLoad(llvm::Type::getIntNTy(ctx, left.bitWidth), left.ll);
     auto post = build.CreateAdd(pre, llvm::ConstantInt::get(pre->getType(), (op == Decrement) ? -1 : 1));
     build.CreateStore(post, left.ll);
@@ -652,7 +652,7 @@ static const Operator precTable[] =
 static auto find_var(uint32_t identIdx)
 {
     return std::find_if(
-        curInstr->fields.begin(), curInstr->fields.end(), 
+        curInstr->fields.begin(), curInstr->fields.end(),
         [identIdx](CDSLInstr::Field& f){return f.identIdx == identIdx;});
 }
 
@@ -664,7 +664,7 @@ Value ParseExpressionTerminal(TokenStream& ts, llvm::Function* func, llvm::IRBui
         case Identifier:
         {
             auto t = ts.Pop();
-            
+
             // rd is true to skip "if (rd != 0)" checks.
             if (t.ident.str == "rd")
                 return {llvm::ConstantInt::get(llvm::Type::getInt32Ty(ctx), 1)};
@@ -674,14 +674,14 @@ Value ParseExpressionTerminal(TokenStream& ts, llvm::Function* func, llvm::IRBui
                 pop_cur(ts, ABrOpen);
                 auto ident = pop_cur(ts, Identifier).ident;
                 pop_cur(ts, ABrClose);
-                
+
                 auto match = find_var(ident.idx);
                 if (match != curInstr->fields.end())
                 {
                     if (!(match->type & CDSLInstr::REG))
                         error((std::string(t.ident.str) + " is used as a register ID but not defined as such").c_str(), ts);
 
-                    return Value{func->getArg(match - curInstr->fields.begin()), 32, 
+                    return Value{func->getArg(match - curInstr->fields.begin()), 32,
                         (bool)(match->type & CDSLInstr::SIGNED_REG)};
                 }
                 error(("undefined register ID: " + std::string(ident.str)).c_str(), ts);
@@ -693,7 +693,7 @@ Value ParseExpressionTerminal(TokenStream& ts, llvm::Function* func, llvm::IRBui
                 {
                     if (!(match->type & CDSLInstr::IMM))
                         error((std::string(t.ident.str) + " is used as an immediate but not defined as such").c_str(), ts);
-                    
+
                     auto* arg = func->getArg(match - curInstr->fields.begin());
 
                     Value v = {arg, (bool)(match->type & CDSLInstr::SIGNED)};
@@ -827,7 +827,7 @@ Value ParseExpression(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& 
 
 struct VarDef
 {
-   std::string_view ident; 
+   std::string_view ident;
    uint32_t identIdx;
    int bitSize;
    bool sgn;
@@ -837,7 +837,7 @@ VarDef ParseDefinition(TokenStream& ts)
 {
     bool sgn = pop_cur_if(ts, SignedKeyword);
     if (!sgn) pop_cur(ts, UnsignedKeyword);
-    
+
     int bitSize = -1;
     if (pop_cur_if(ts, LessThan))
     {
@@ -856,7 +856,7 @@ void ParseDeclaration (TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>&
     auto& ctx = func->getContext();
 
     auto [ident, identIdx, bitSize, sgn] = ParseDefinition(ts);
-    
+
     std::optional<Value> init;
     if (pop_cur_if(ts, Assignment))
     {
@@ -884,7 +884,7 @@ void ParseDeclaration (TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>&
 
     if (init.has_value())
         build.CreateStore(init->ll, v.ll, false);
-    
+
     if (!variables[identIdx].empty() && variables[identIdx].back().scope == scopeDepth)
         error(("redefinition: " + std::string(ident)).c_str(), ts);
 
@@ -937,7 +937,7 @@ void ParseStatement(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& bu
             llvm::BasicBlock* bbBody = llvm::BasicBlock::Create(ctx, "loop_body", func);
             llvm::BasicBlock* bbBreak = llvm::BasicBlock::Create(ctx, "loop_break", func);
             llvm::BasicBlock* bbInc = nullptr;
-            
+
             bool isFor = ts.Pop().type == ForKeyword;
             pop_cur(ts, RBrOpen);
             if (isFor)
@@ -998,7 +998,7 @@ void ParseScope(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build)
 
     while (ts.Peek().type != CBrClose)
         ParseStatement(ts, func, build);
-    
+
     pop_var_scope();
     pop_cur(ts, CBrClose);
 }
@@ -1007,19 +1007,19 @@ void ParseOperands(TokenStream& ts, CDSLInstr& instr)
 {
     auto parse_attributes = [](TokenStream& ts)
     {
-        // using enum CDSLInstr::FieldType;
+        using FieldType = CDSLInstr::FieldType;
 
         // Sign bit specifies whether to OR or AND the mask, so just do
         // ~MY_FIELD to unset myField.
         const static llvm::DenseMap<llvm::StringRef, uint> attrMap =
         {
-            {"is_unsigned", ~CDSLInstr::FieldType::SIGNED_REG},
-            {"is_signed", CDSLInstr::FieldType::SIGNED_REG},
-            {"is_imm", CDSLInstr::FieldType::IMM},
-            {"is_reg", CDSLInstr::FieldType::REG},
-            {"in", CDSLInstr::FieldType::IN},
-            {"out", CDSLInstr::FieldType::OUT},
-            {"inout", (CDSLInstr::FieldType::IN|CDSLInstr::FieldType::OUT)},
+            {"is_unsigned", ~FieldType::SIGNED_REG},
+            {"is_signed", FieldType::SIGNED_REG},
+            {"is_imm", FieldType::IMM},
+            {"is_reg", FieldType::REG},
+            {"in", FieldType::IN},
+            {"out", FieldType::OUT},
+            {"inout", (FieldType::IN|FieldType::OUT)},
         };
 
         uint acc = 0;
@@ -1038,7 +1038,7 @@ void ParseOperands(TokenStream& ts, CDSLInstr& instr)
                 else
                     acc |= op;
             }
-            
+
             for (int i = 0; i < 2; i++)
                 pop_cur(ts, ABrClose);
         }
@@ -1049,7 +1049,7 @@ void ParseOperands(TokenStream& ts, CDSLInstr& instr)
     pop_cur(ts, OperandsKeyword);
     pop_cur(ts, Colon);
     bool scope = pop_cur_if(ts, CBrOpen);
-    
+
     while (peek_is_type(ts))
     {
         auto vd = ParseDefinition(ts);
@@ -1061,7 +1061,7 @@ void ParseOperands(TokenStream& ts, CDSLInstr& instr)
             .ident = vd.ident,
             .identIdx = vd.identIdx,
             .type = (CDSLInstr::FieldType)type});
-        
+
         pop_cur(ts, Semicolon);
     }
 
@@ -1070,13 +1070,13 @@ void ParseOperands(TokenStream& ts, CDSLInstr& instr)
 
 
 void ParseEncoding(TokenStream& ts, CDSLInstr& instr)
-{   
+{
     pop_cur(ts, EncodingKeyword);
     pop_cur(ts, Colon);
 
     uint offset = 32;
     uint preDefIdx = instr.fields.size();
-    
+
     while (1)
     {
         switch (ts.Peek().type)
@@ -1094,7 +1094,7 @@ void ParseEncoding(TokenStream& ts, CDSLInstr& instr)
             case Identifier:
             {
                 auto idT = ts.Pop();
-                
+
                 pop_cur(ts, ABrOpen);
                 auto hi = pop_cur(ts, IntLiteral).literal.value;
                 auto lo = hi;
@@ -1109,7 +1109,7 @@ void ParseEncoding(TokenStream& ts, CDSLInstr& instr)
 
 
                 // Check if a field definition for this identifier exists already
-                auto match = std::find_if(instr.fields.begin(), instr.fields.end(), 
+                auto match = std::find_if(instr.fields.begin(), instr.fields.end(),
                     [&idT](CDSLInstr::Field& f){return f.identIdx == idT.ident.idx;});
                 if (match == instr.fields.end())
                 {
@@ -1128,11 +1128,11 @@ void ParseEncoding(TokenStream& ts, CDSLInstr& instr)
                     // For explictly defined fields we can do bounds checking
                     if (hi >= match->len) error("out of bounds", ts);
                 }
-                
+
                 // Create a field fragment referencing the field definition
                 instr.frags.push_back((CDSLInstr::FieldFrag){
                     .idx = (uint8_t)matchIdx, .len = (uint8_t)len, .dstOffset = (uint8_t)offset, .srcOffset = (uint8_t)lo});
-                
+
                 break;
             }
             default: syntax_error(ts);
@@ -1153,7 +1153,7 @@ void ParseEncoding(TokenStream& ts, CDSLInstr& instr)
     if (instr.fields.size() > 255) error("too many instruction fields", ts);
     uint8_t constIdx = instr.fields.size() - 1;
 
-    // Reference newly created constant field in all constant frags 
+    // Reference newly created constant field in all constant frags
     for (auto& frag : instr.frags)
         if (frag.idx == 255) frag.idx = constIdx;
 }
@@ -1162,13 +1162,13 @@ void ParseArguments (TokenStream& ts, CDSLInstr& instr)
 {
     pop_cur(ts, AssemblyKeyword);
     pop_cur(ts, Colon);
-    
+
     auto str = std::string(pop_cur(ts, StringLiteral).strLit.str);
-    
+
     // To support old-style implicit field definitions, we (also) use the argument string
     // to determine whether a field is an immediate or a register file index. This is not
     // a problem when using well-formed instruction definitions, but also not particularly
-    // clean. 
+    // clean.
     for (auto& f : instr.fields)
     {
         auto fstr = std::string(f.ident);
@@ -1181,7 +1181,7 @@ void ParseArguments (TokenStream& ts, CDSLInstr& instr)
         if (strNew != str)
             f.type = (CDSLInstr::FieldType)(f.type | CDSLInstr::FieldType::IMM);
     }
-    
+
     instr.argString = str;
     pop_cur(ts, Semicolon);
 }
@@ -1223,10 +1223,10 @@ void ParseBehaviour (TokenStream& ts, CDSLInstr& instr, llvm::Module* mod, Token
     llvm::Function* func =
         llvm::Function::Create(fType, llvm::GlobalValue::ExternalLinkage,
                                 std::string("impl") + std::string(ident.ident.str), mod);
-    
+
     for (size_t i = 0; i < argNames.size(); i++)
         func->getArg(i)->setName(argNames[i]);
-    
+
     // For vectorization to work, we must assume that
     // the destination does not overlap with sources.
     // For simulators using this generated code, this means
@@ -1235,7 +1235,7 @@ void ParseBehaviour (TokenStream& ts, CDSLInstr& instr, llvm::Module* mod, Token
         if (curInstr->fields[i].type & CDSLInstr::OUT)
             func->getArg(i)->addAttr(llvm::Attribute::NoAlias);
 
-    
+
     entry = llvm::BasicBlock::Create(ctx, "", func);
     llvm::IRBuilder<> build(entry);
 
@@ -1276,9 +1276,9 @@ std::vector<CDSLInstr> ParseCoreDSL2(TokenStream& ts, llvm::Module* mod)
             ParseBehaviour(ts, instr, mod, ident);
 
             pop_cur(ts, CBrClose);
-            instrs.push_back(instr); 
+            instrs.push_back(instr);
         }
-        
+
         if (parseBoilerplate)
         {
             pop_cur(ts, CBrClose);
