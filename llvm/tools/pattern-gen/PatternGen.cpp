@@ -25,18 +25,16 @@
 #include <unordered_map>
 #include <utility>
 
-using namespace llvm;
-using SVT = llvm::MVT::SimpleValueType;
-
 int OptimizeBehavior(llvm::Module *M, std::vector<CDSLInstr> const &instrs,
                      std::ostream &ostreamIR, std::string extName,
+                     llvm::CodeGenOptLevel optLevel, std::string mattr) {
   // All other code in this file is called during code generation
   // by the LLVM pipeline. We thus "pass" arguments as globals.
-  llvm::PatternGenArgs::ExtName = &extName;
+  // llvm::PatternGenArgs::ExtName = &extName;
 
   int rv = RunOptPipeline(M, mattr, optLevel, ostreamIR);
 
-  llvm::PatternGenArgs::ExtName = nullptr;
+  // llvm::PatternGenArgs::ExtName = nullptr;
 
   return rv;
 }

@@ -521,8 +521,6 @@ traverseUnopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
   return std::make_tuple(SUCCESS, std::move(NodeR));
 }
 
-static std::pair<PatternError, std::unique_ptr<PatternNode>>
-
 static int getArgIdx(MachineRegisterInfo &MRI, Register Reg) {
   auto It = std::find_if(MRI.livein_begin(), MRI.livein_end(),
                          [&](std::pair<MCRegister, Register> const &e) {
@@ -664,6 +662,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
                                        MRI.getType(Cur.getOperand(0).getReg()),
                                        Field->ident, true, 0, Field->len,
                                        Field->type & CDSLInstr::SIGNED));
+  }
   }
 
   return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
