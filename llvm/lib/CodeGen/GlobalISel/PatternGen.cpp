@@ -151,7 +151,7 @@ static const std::unordered_map<unsigned, std::string> cmpStr = {
 
 std::string lltToString(LLT Llt) {
   if (Llt.isFixedVector())
-    return "v" + std::to_string(Llt.getElementCount().getFixedValue()) + lltToString(Llt.getElementType()); 
+    return "v" + std::to_string(Llt.getElementCount().getFixedValue()) + lltToString(Llt.getElementType());
   if (Llt.isScalar())
     return "i" + std::to_string(Llt.getSizeInBits());
   assert(0 && "invalid type");
@@ -788,7 +788,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
             << OutsString << "), (ins " << InsString << ")>;\n";
 
   std::string PatternStr = Node->patternString();
-  std::string Code = "def : Pat<\n\t" + PatternStr + ",\n\t(" + InstName + " ";
+  // TODO: fix for real?
+  // std::string Code = "def : Pat<\n\t" + PatternStr + ",\n\t(" + InstName + " ";
+  std::string Code = "def : Pat<\n\t(i32 " + PatternStr + "),\n\t(" + InstName + " ";
 
   Code += InsString;
   Code += ")>;";
