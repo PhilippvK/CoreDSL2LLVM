@@ -332,7 +332,8 @@ public:
 
   unsigned getRegisterClassForType(bool Vector, Type *Ty = nullptr) const {
     if (Vector)
-      return ST->hasVendorXCvsimd() ? RISCVRegisterClass::GPRRC : RISCVRegisterClass::VRRC;
+      return true ? RISCVRegisterClass::GPRRC : RISCVRegisterClass::VRRC;
+      // return ST->hasVendorXCvsimd() ? RISCVRegisterClass::GPRRC : RISCVRegisterClass::VRRC;
     if (!Ty)
       return RISCVRegisterClass::GPRRC;
 

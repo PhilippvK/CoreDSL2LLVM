@@ -221,28 +221,28 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
                                                {s32, p0, s32, 8},
                                                {p0, p0, sXLen, 8}});
 
-  if (ST.hasVendorXCvsimd()) {
-    LoadStoreActions.bitcastIf(LegalityPredicates::typeIs(0, v4i8),
-                               LegalizeMutations::changeTo(0, LLT::scalar(32)));
-    LoadStoreActions.bitcastIf(LegalityPredicates::typeIs(0, v2i16),
-                               LegalizeMutations::changeTo(0, LLT::scalar(32)));
+  // if (ST.hasVendorXCvsimd()) {
+  //   LoadStoreActions.bitcastIf(LegalityPredicates::typeIs(0, v4i8),
+  //                              LegalizeMutations::changeTo(0, LLT::scalar(32)));
+  //   LoadStoreActions.bitcastIf(LegalityPredicates::typeIs(0, v2i16),
+  //                              LegalizeMutations::changeTo(0, LLT::scalar(32)));
 
-    // allow bitcasting back and forth between vector and scalar
-    getActionDefinitionsBuilder(G_BITCAST)
-        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, s32),
-                                         LegalityPredicates::typeIs(1, v4i8)))
-        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s32),
-                                         LegalityPredicates::typeIs(0, v4i8)))
-        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, s32),
-                                         LegalityPredicates::typeIs(1, v2i16)))
-        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s32),
-                                         LegalityPredicates::typeIs(0, v2i16)));
+  //   // allow bitcasting back and forth between vector and scalar
+  //   getActionDefinitionsBuilder(G_BITCAST)
+  //       .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, s32),
+  //                                        LegalityPredicates::typeIs(1, v4i8)))
+  //       .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s32),
+  //                                        LegalityPredicates::typeIs(0, v4i8)))
+  //       .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, s32),
+  //                                        LegalityPredicates::typeIs(1, v2i16)))
+  //       .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s32),
+  //                                        LegalityPredicates::typeIs(0, v2i16)));
 
-    getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor({v4i8, v2i16});
+  //   getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor({v4i8, v2i16});
 
-    ArithActions.legalFor({v4i8, v2i16});
-    ShiftActions.legalFor({v4i8, v2i16});
-  }
+  //   ArithActions.legalFor({v4i8, v2i16});
+  //   ShiftActions.legalFor({v4i8, v2i16});
+  // }
 
   auto &ExtLoadActions =
       getActionDefinitionsBuilder({G_SEXTLOAD, G_ZEXTLOAD})

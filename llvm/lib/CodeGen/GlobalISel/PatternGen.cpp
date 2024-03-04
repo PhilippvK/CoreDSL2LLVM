@@ -134,10 +134,11 @@ static const std::unordered_map<unsigned, std::string> cmpStr = {
 };
 
 std::string lltToString(LLT Llt) {
-  std::string TypeStr;
-  llvm::raw_string_ostream TypeStrS(TypeStr);
-  Llt.print(TypeStrS);
-  return TypeStr;
+  return "i32";
+  // std::string TypeStr;
+  // llvm::raw_string_ostream TypeStrS(TypeStr);
+  // Llt.print(TypeStrS);
+  // return TypeStr;
 }
 
 struct PatternNode {
@@ -719,7 +720,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
             << OutsString << "), (ins " << InsString << ")>;\n";
 
   std::string PatternStr = Node->patternString();
-  std::string Code = "def : Pat<\n\t" + PatternStr + ",\n\t(" + InstName + " ";
+  std::string Code = "def : Pat<\n\t(i32 " + PatternStr + "),\n\t(" + InstName + " ";
 
   Code += InsString;
   Code += ")>;";
