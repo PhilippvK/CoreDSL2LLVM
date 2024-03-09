@@ -89,5 +89,8 @@ TARGET_BUILTIN(__builtin_riscv_sm3p1, "UiUi", "nc", "zksh")
 TARGET_BUILTIN(__builtin_riscv_ntl_load, "v.", "t", "zihintntl")
 TARGET_BUILTIN(__builtin_riscv_ntl_store, "v.", "t", "zihintntl")
 
+// BuiltinsRISCV.def - builtins_riscv - INSERTION_START
+// BuiltinsRISCV.def - builtins_riscv - INSERTION_END
+
 #undef BUILTIN
 #undef TARGET_BUILTIN

@@ -771,6 +771,9 @@ def HasStdExtSvinval : Predicate<"Subtarget->hasStdExtSvinval()">,
                        AssemblerPredicate<(all_of FeatureStdExtSvinval),
                            "'Svinval' (Fine-Grained Address-Translation Cache Invalidation)">;
 
+// RISCVFeatures.td - riscv_features - INSERTION_START
+// RISCVFeatures.td - riscv_features - INSERTION_END
+
 def FeatureStdExtSvnapot
     : SubtargetFeature<"svnapot", "HasStdExtSvnapot", "true",
                        "'Svnapot' (NAPOT Translation Contiguity)">;

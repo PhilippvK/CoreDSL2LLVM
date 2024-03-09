@@ -21243,6 +21243,9 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
     ID = Intrinsic::riscv_sha256sum1;
     break;
 
+// CGBuiltin.cpp - cg_builtin - INSERTION_START
+// CGBuiltin.cpp - cg_builtin - INSERTION_END
+
   // Zksed
   case RISCV::BI__builtin_riscv_sm4ks:
     ID = Intrinsic::riscv_sm4ks;

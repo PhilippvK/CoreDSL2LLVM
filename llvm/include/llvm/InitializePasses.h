@@ -313,6 +313,8 @@ void initializeWasmEHPreparePass(PassRegistry&);
 void initializeWinEHPreparePass(PassRegistry&);
 void initializeWriteBitcodePassPass(PassRegistry&);
 void initializeXRayInstrumentationPass(PassRegistry&);
+// InitializePasses.h - initialize_passes_decl - INSERTION_START
+// InitializePasses.h - initialize_passes_decl - INSERTION_END
 
 } // end namespace llvm
 

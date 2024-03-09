@@ -21,4 +21,6 @@ void llvm::initializeGlobalISel(PassRegistry &Registry) {
   initializeLocalizerPass(Registry);
   initializeRegBankSelectPass(Registry);
   initializeInstructionSelectPass(Registry);
+  // GlobalISel.cpp - gisel_init - INSERTION_START
+  // GlobalISel.cpp - gisel_init - INSERTION_END
 }

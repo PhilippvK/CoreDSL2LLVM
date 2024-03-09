@@ -309,6 +309,9 @@ def simm21_lsb0_jal : Operand<OtherVT> {
   let OperandType = "OPERAND_PCREL";
 }
 
+// RISCVInstrInfo.td - field_types - INSERTION_START
+// RISCVInstrInfo.td - field_types - INSERTION_END
+
 def BareSymbol : AsmOperandClass {
   let Name = "BareSymbol";
   let RenderMethod = "addImmOperands";
@@ -394,6 +397,8 @@ def uimm6gt32 : ImmLeaf<XLenVT, [{
 def FrameAddrRegImm : ComplexPattern<iPTR, 2, "SelectFrameAddrRegImm",
                                      [frameindex, or, add]>;
 def AddrRegImm : ComplexPattern<iPTR, 2, "SelectAddrRegImm">;
+// RISCVInstrInfo.td - complex_patterns - INSERTION_START
+// RISCVInstrInfo.td - complex_patterns - INSERTION_END
 
 // Return the negation of an immediate value.
 def NegImm : SDNodeXForm<imm, [{
@@ -2179,6 +2184,9 @@ include "RISCVInstrInfoXVentana.td"
 include "RISCVInstrInfoXTHead.td"
 include "RISCVInstrInfoXSf.td"
 include "RISCVInstrInfoXCV.td"
+
+// RISCVInstrInfo.td - riscv_instr_info_includes - INSERTION_START
+// RISCVInstrInfo.td - riscv_instr_info_includes - INSERTION_END
 
 //===----------------------------------------------------------------------===//
 // Global ISel
