@@ -22,5 +22,6 @@ void llvm::initializeGlobalISel(PassRegistry &Registry) {
   initializeRegBankSelectPass(Registry);
   initializeInstructionSelectPass(Registry);
   // GlobalISel.cpp - gisel_init - INSERTION_START
+  initializePatternGenPass(Registry);
   // GlobalISel.cpp - gisel_init - INSERTION_END
 }
