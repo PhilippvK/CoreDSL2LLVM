@@ -80,6 +80,8 @@ RISCVRegisterBankInfo::getRegBankFromRegClass(const TargetRegisterClass &RC,
   switch (RC.getID()) {
   default:
     llvm_unreachable("Register class not supported");
+  case RISCV::PulpV2RegClassID:
+  case RISCV::PulpV4RegClassID:
   case RISCV::GPRRegClassID:
   case RISCV::GPRF16RegClassID:
   case RISCV::GPRF32RegClassID:
