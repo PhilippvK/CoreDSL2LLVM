@@ -11,6 +11,7 @@
 /// primary legalization.
 //
 //===----------------------------------------------------------------------===//
+#include <iostream>
 
 #include "llvm/CodeGen/GlobalISel/LegalizerHelper.h"
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
@@ -44,6 +45,11 @@
 using namespace llvm;
 using namespace LegalizeActions;
 using namespace MIPatternMatch;
+
+cl::opt<std::string> CustomLegalizerSettings(
+    "custom-legalizer-settings",
+    cl::desc("TODO"),
+    cl::Hidden);
 
 /// Try to break down \p OrigTy into \p NarrowTy sized pieces.
 ///
@@ -119,9 +125,76 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
   LLVM_DEBUG(dbgs() << "Legalizing: " << MI);
 
   MIRBuilder.setInstrAndDebugLoc(MI);
+  std::string name = std::string(MIRBuilder.getTII().getName(MI.getOpcode()));
+  LLVM_DEBUG(
+      dbgs() << "INSTR_NAME=" << MIRBuilder.getTII().getName(MI.getOpcode()) << "\n";
+  );
+  SmallVector<LLT, 8> Types;
+  SmallBitVector SeenTypes(8);
+  ArrayRef<MCOperandInfo> OpInfo = MI.getDesc().operands();
+  // FIXME: probably we'll need to cache the results here somehow?
+  for (unsigned i = 0; i < MI.getDesc().getNumOperands(); ++i) {
+    if (!OpInfo[i].isGenericType())
+      continue;
+
+    // We must only record actions once for each TypeIdx; otherwise we'd
+    // try to legalize operands multiple times down the line.
+    unsigned TypeIdx = OpInfo[i].getGenericTypeIndex();
+    if (SeenTypes[TypeIdx])
+      continue;
+
+    SeenTypes.set(TypeIdx);
+
+    // LLT Ty = getTypeFromTypeIdx(MI, MRI, i, TypeIdx);
+    if (MI.getOperand(TypeIdx).isReg()) {
+      LLT Ty = MRI.getType(MI.getOperand(TypeIdx).getReg());
+      Types.push_back(Ty);
+    }
+  }
+  SmallVector<LegalityQuery::MemDesc, 2> MemDescrs;
+  for (const auto &MMO : MI.memoperands())
+    MemDescrs.push_back({*MMO});
+  // TODO: extract name of MI here!
+  LegalityQuery Query = {MI.getOpcode(), Types, MemDescrs};
+  LLVM_DEBUG(
+    dbgs() << "Query: ";
+    Query.print(dbgs());
+    dbgs() << "\n";
+  );
+  bool skipLegalization = false;
+  bool forceLower = false;
+  if (!CustomLegalizerSettings.empty()) {
+    std::cout << "Custom legalizer settings: " << CustomLegalizerSettings << std::endl;
+    if (name == "G_FSHR" || name == "G_CONSTANT_FOLD_BARRIER" || name == "G_IMPLICIT_DEF") {
+      skipLegalization = false;
+      forceLower = false;
+    } else if (name == "G_SEXT") {
+      skipLegalization = false;
+      forceLower = true;
+    } else {
+      skipLegalization = true;
+      forceLower = false;
+    }
+    // struct LegalityQuery { unsigned Opcode; ArrayRef<LLT> Types; (...)}
+    // how to convert opcode to string? (or the other way around?)
+    // Opcodes are defined here in for build:
+    // - .seal5/build/release/lib/Target/RISCV/RISCVGenInstrInfo.inc
+    //    G_ADD   = 47,
+    //    /* 138128 */ "G_ADD\0"
+  } else {
+    std::cout << "Custom legalizer settings missing! " << std::endl;
+  }
 
   if (isa<GIntrinsic>(MI))
     return LI.legalizeIntrinsic(*this, MI) ? Legalized : UnableToLegalize;
+  if (forceLower) {
+    LLVM_DEBUG(dbgs() << ".. Lowered by user\n");
+    return lower(MI, 0, LLT{});
+  }
+  if (skipLegalization) {
+    LLVM_DEBUG(dbgs() << ".. Legalized by user\n");
+    return AlreadyLegal;
+  }
   auto Step = LI.getAction(MI, MRI);
   switch (Step.Action) {
   case Legal:
