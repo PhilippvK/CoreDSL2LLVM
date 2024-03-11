@@ -62,8 +62,8 @@ static const std::string CoveragePrefix;
 #endif
 
 std::ostream *PatternGenArgs::OutStream = nullptr;
-std::string *PatternGenArgs::ExtName = nullptr;
 std::vector<CDSLInstr> const *PatternGenArgs::Instrs = nullptr;
+PGArgsStruct PatternGenArgs::Args;
 
 struct PatternArg {
   std::string ArgTypeStr;
@@ -932,7 +932,8 @@ generatePattern(MachineFunction &MF) {
       Addr->getParent()->getOpcode() != TargetOpcode::COPY)
     return std::make_pair(FORMAT_STORE, nullptr);
 
-  auto [Idx, Field] = getArgInfo(MRI, Addr->getParent()->getOperand(1).getReg());
+  auto [Idx, Field] =
+      getArgInfo(MRI, Addr->getParent()->getOperand(1).getReg());
   PatternArgs[Idx].Out = true;
 
   auto *Root = MRI.getOneDef(Store.getOperand(0).getReg());
@@ -1003,8 +1004,12 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   auto &OutStream = *PatternGenArgs::OutStream;
   auto &ExtName = *PatternGenArgs::ExtName;
 
-  // TODO: do not hardcode!
-  OutStream << "let Predicates = [Has" << ExtName << "], hasSideEffects = 0, mayLoad = 0, mayStore = 0, "
+  OutStream << "let ";
+  if (!PatternGenArgs::Args.Predicates.empty()) {
+    OutStream << "Predicates = [" << PatternGenArgs::Args.Predicates
+              << "], ";
+  }
+  OutStream << "hasSideEffects = 0, mayLoad = 0, mayStore = 0, "
                "isCodeGenOnly = 1";
 
   OutStream << ", Constraints = \"";
@@ -1039,4 +1044,3 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
 
   return true;
 }
-

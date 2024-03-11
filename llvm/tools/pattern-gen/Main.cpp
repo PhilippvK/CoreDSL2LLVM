@@ -66,6 +66,9 @@ static cl::opt<char>
                       "(default = '-O3')"),
              cl::cat(ToolOptions), cl::init('3'));
 
+static cl::opt<std::string> Predicates(
+    "p", cl::desc("Predicate(s) used for instructions in output TableGen"), cl::cat(ToolOptions), cl::init("HasVendorXCValu"));
+
 #include <iostream>
 namespace fs = std::filesystem;
 
@@ -120,6 +123,8 @@ int main(int argc, char **argv) {
     if (verifyModule(*mod, &errs()))
       return -1;
 
+  llvm::errs() << *mod << "\n";
+
   // TODO: use force
 
   llvm::CodeGenOptLevel Opt;
@@ -138,13 +143,17 @@ int main(int argc, char **argv) {
     break;
   }
 
-  OptimizeBehavior(mod.get(), instrs, irOut, ExtName, Opt, Mattr);
+  PGArgsStruct Args{.ExtName = ExtName,
+                    .Mattr = Mattr,
+                    .OptLevel = Opt,
+                    .Predicates = Predicates};
+
+  OptimizeBehavior(mod.get(), instrs, irOut, Args);
   if (!SkipFmt)
     PrintInstrsAsTableGen(instrs, formatOut);
 
   if (!SkipPat)
-    if (GeneratePatterns(mod.get(), instrs, patternOut, ExtName, Mattr))
+    if (GeneratePatterns(mod.get(), instrs, patternOut, Args))
       return -1;
   return 0;
 }
-
