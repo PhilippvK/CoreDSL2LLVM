@@ -269,6 +269,27 @@ Value gen_subscript(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& bu
     return left;
 }
 
+void check_lvalue(Value& v, TokenStream& ts, llvm::BasicBlock* bb)
+{
+    if (!v.isLValue)
+        error("cannot assign rvalue", ts);
+
+    llvm::Value* ll = v.ll;
+    // For register arguments, add "no alias" if assigned for vectorization to work.
+    while (1)
+    {
+        if (auto *arg = llvm::dyn_cast<llvm::Argument>(ll))
+        {
+            arg->addAttr(llvm::Attribute::NoAlias);
+            break;
+        }
+        // Peek through GEPs
+        if (auto* gep = llvm::dyn_cast<llvm::GetElementPtrInst>(ll))
+            ll = gep->getPointerOperand();
+        else break;
+    }
+}
+
 Value gen_assign(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build, TokenType op, Value left, Value right)
 {
     auto& ctx = func->getContext();
@@ -1287,4 +1308,3 @@ std::vector<CDSLInstr> ParseCoreDSL2(TokenStream& ts, llvm::Module* mod)
     }
     return instrs;
 }
-
