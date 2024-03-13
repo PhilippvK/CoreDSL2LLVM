@@ -327,7 +327,7 @@ struct TernopNode : public PatternNode {
     return FirstT.isValid() ? FirstT : (SecondT.isValid() ? SecondT : ThirdT);
   }
 
-  static bool classof(const PatternNode *p) { return p->getKind() == PN_Binop; }
+  static bool classof(const PatternNode *p) { return p->getKind() == PN_Ternop; }
 };
 
 struct BinopNode : public PatternNode {
