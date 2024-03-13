@@ -290,8 +290,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .clampNumElements(1, v4i8, v4i8);
 
       getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
-        .alwaysLegal();
-        // .lowerFor({v4s8});
+        // .alwaysLegal();
+        .lowerFor({v4s8});
       getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
         .alwaysLegal();
         // .legalIf([=](const LegalityQuery &Query) {
