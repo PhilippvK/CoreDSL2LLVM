@@ -1009,7 +1009,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   OutsString = OutsString.substr(0, OutsString.size() - 2);
 
   auto &OutStream = *PatternGenArgs::OutStream;
-  auto &ExtName = *PatternGenArgs::ExtName;
+  auto &ExtName = PatternGenArgs::Args.ExtName;
 
   OutStream << "let ";
   if (!PatternGenArgs::Args.Predicates.empty()) {
