@@ -73,6 +73,12 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   const LLT nxv4s64 = LLT::scalable_vector(4, s64);
   const LLT nxv8s64 = LLT::scalable_vector(8, s64);
 
+  const LLT v4i8 = LLT::fixed_vector(4, LLT::scalar(8));
+  const LLT v4s8 = LLT::fixed_vector(4, LLT::scalar(8));
+  const LLT v2i16 = LLT::fixed_vector(2, LLT::scalar(16));
+  const LLT v2s16 = LLT::fixed_vector(2, LLT::scalar(16));
+  const LLT v4i1 = LLT::fixed_vector(4, LLT::scalar(1));
+
   using namespace TargetOpcode;
 
 // RISCVLegalizerInfo.cpp - riscv_legalizer_info - INSERTION_START
@@ -83,7 +89,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
                     nxv32s16, nxv1s32, nxv2s32, nxv4s32, nxv8s32, nxv16s32,
                     nxv1s64,  nxv2s64, nxv4s64, nxv8s64};
 
-  getActionDefinitionsBuilder({G_ADD, G_SUB, G_AND, G_OR, G_XOR})
+  auto &ArithActions = getActionDefinitionsBuilder({G_ADD, G_SUB, G_AND, G_OR, G_XOR})
       .legalFor({s32, sXLen})
       .legalIf(all(
           typeInSet(0, AllVecTys),
@@ -111,20 +117,6 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .clampScalar(0, s32, sXLen)
       .minScalarSameAs(1, 0);
 
-  if (ST.is64Bit()) {
-    getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT})
-        .legalFor({{sXLen, s32}})
-        .maxScalar(0, sXLen);
-
-    getActionDefinitionsBuilder(G_SEXT_INREG)
-        .customFor({sXLen})
-        .maxScalar(0, sXLen)
-        .lower();
-  } else {
-    getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT}).maxScalar(0, sXLen);
-
-    getActionDefinitionsBuilder(G_SEXT_INREG).maxScalar(0, sXLen).lower();
-  }
 
   // Merge/Unmerge
   for (unsigned Op : {G_MERGE_VALUES, G_UNMERGE_VALUES}) {
@@ -187,14 +179,9 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
 
   getActionDefinitionsBuilder({G_CONSTANT, G_IMPLICIT_DEF})
       .legalFor({s32, sXLen, p0})
+      .legalFor({v4s8})
       .widenScalarToNextPow2(0)
       .clampScalar(0, s32, sXLen);
-
-  getActionDefinitionsBuilder(G_ICMP)
-      .legalFor({{sXLen, sXLen}, {sXLen, p0}})
-      .widenScalarToNextPow2(1)
-      .clampScalar(1, sXLen, sXLen)
-      .clampScalar(0, sXLen, sXLen);
 
   auto &SelectActions = getActionDefinitionsBuilder(G_SELECT).legalFor(
       {{s32, sXLen}, {p0, sXLen}});
@@ -210,6 +197,136 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
                                      {s32, p0, s16, 16},
                                      {s32, p0, s32, 32},
                                      {p0, p0, sXLen, XLen}});
+  if (ST.hasFastUnalignedAccess())
+    LoadStoreActions.legalForTypesWithMemDesc({{s32, p0, s8, 8},
+                                               {s32, p0, s16, 8},
+                                               {s32, p0, s32, 8},
+                                               {p0, p0, sXLen, 8}});
+
+    // getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT})
+    //     // .scalarize(0)
+    //     // .scalarize(1);
+    //     // .widenScalarToNextPow2(0)
+    //     // .widenScalarToNextPow2(1)
+    //     // .maxScalarOrElt(0, s32)
+    //     // .minScalarOrElt(0, s8)
+    //     // .maxScalarOrElt(1, s32)
+    //     // .minScalarOrElt(1, s8)
+    //     // .lower();
+    //     .lowerFor({{v4i8, v4i1}})
+    //     .legalFor({{v4i8, v4i1}});
+  getActionDefinitionsBuilder(G_TRUNC)
+      // .legalFor({{v2s32, v2s64}, {v4s16, v4s32}, {v8s8, v8s16}})
+      .moreElementsToNextPow2(0)
+      .clampMaxNumElements(0, s8, 4)
+      .minScalarOrEltIf(
+          [=](const LegalityQuery &Query) { return Query.Types[0].isVector(); },
+          0, s8)
+      .lowerIf([=](const LegalityQuery &Query) {
+        LLT DstTy = Query.Types[0];
+        LLT SrcTy = Query.Types[1];
+        return DstTy.isVector() && SrcTy.getSizeInBits() > 128 &&
+               DstTy.getScalarSizeInBits() * 2 <= SrcTy.getScalarSizeInBits();
+      })
+
+      .alwaysLegal();
+  if (ST.hasGPR32V()) {
+    LoadStoreActions
+      .bitcastIf(LegalityPredicates::typeIs(0, v4i8), LegalizeMutations::changeTo(0, LLT::scalar(32)))
+      .bitcastIf(LegalityPredicates::typeIs(1, v4i8), LegalizeMutations::changeTo(1, LLT::scalar(32)))
+      .bitcastIf(LegalityPredicates::typeIs(0, s32), LegalizeMutations::changeTo(0, v4i8))
+      .bitcastIf(LegalityPredicates::typeIs(1, s32), LegalizeMutations::changeTo(1, v4i8));
+
+    // allow bitcasting back and forth between vector and scalar
+    getActionDefinitionsBuilder(G_BITCAST)
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, s32),
+                                         LegalityPredicates::typeIs(1, v4i8)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s32),
+                                         LegalityPredicates::typeIs(0, v4i8)));
+
+    getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).clampScalar(1, s8, s32).clampScalar(2, s8, s32).legalFor({v4i8});
+
+    getActionDefinitionsBuilder(G_BUILD_VECTOR)
+        .legalFor({{v4s8, s8},
+                   {v2s16, s16}})
+        .clampNumElements(0, v4s8, v4s8)
+        .clampNumElements(0, v2s16, v2s16)
+        .minScalarOrElt(0, s8)
+        // .widenVectorEltsToVectorMinSize(0, 64)
+        .minScalarSameAs(1, 0);
+
+    ArithActions.legalFor({v4i8});
+    ShiftActions.legalFor({{v4i8, v4i8}});
+    // getActionDefinitionsBuilder(G_ICMP)
+    //     .legalFor({{v4i1, v4i8}});
+    getActionDefinitionsBuilder(G_ICMP)
+      // .legalFor({{v4i1, v4i8}})
+      .legalFor({
+                 {v4i8, v4i8},
+                 })
+      .widenScalarOrEltToNextPow2(1)
+      // .clampScalar(1, s32, s64)
+      // .clampScalar(0, s32, s32)
+
+      .minScalarOrElt(0, s8) // Worst case, we need at least s8.
+      .moreElementsToNextPow2(1)
+      .clampMaxNumElements(1, s8, 4)
+
+      .minScalarEltSameAsIf(
+          [=](const LegalityQuery &Query) {
+            const LLT &Ty = Query.Types[0];
+            const LLT &SrcTy = Query.Types[1];
+            return Ty.isVector() && !SrcTy.getElementType().isPointer() &&
+                   Ty.getElementType() != SrcTy.getElementType();
+          },
+          0, 1)
+      .minScalarOrEltIf(
+          [=](const LegalityQuery &Query) { return Query.Types[1] == v4i8; },
+          1, s32)
+      // .minScalarOrEltIf(
+      //     [=](const LegalityQuery &Query) { return Query.Types[1] == v4i8; },
+      //     0, s8)
+      .moreElementsToNextPow2(1)
+      .clampNumElements(1, v4i8, v4i8);
+
+      getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
+        .alwaysLegal();
+        // .lowerFor({v4s8});
+      getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
+        .alwaysLegal();
+        // .legalIf([=](const LegalityQuery &Query) {
+        //   const LLT &DstTy = Query.Types[0];
+        //   const LLT &SrcTy = Query.Types[1];
+        //   if (DstTy != SrcTy)
+        //     return false;
+        //   return llvm::is_contained(
+        //       {v4s8}, DstTy);
+        // })
+        // .lowerIf([=](const LegalityQuery &Query) {
+        //   return !Query.Types[1].isVector();
+        // })
+        // .clampNumElements(0, v4s8, v4s8);
+  }
+  getActionDefinitionsBuilder(G_ICMP)
+      .legalFor({{sXLen, sXLen}, {sXLen, p0}})
+      .widenScalarToNextPow2(1)
+      .clampScalar(1, sXLen, sXLen)
+      .clampScalar(0, sXLen, sXLen);
+  if (ST.is64Bit()) {
+    getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT})
+        .legalFor({{sXLen, s32}})
+        .maxScalar(0, sXLen);
+
+    getActionDefinitionsBuilder(G_SEXT_INREG)
+        .customFor({sXLen})
+        .maxScalar(0, sXLen)
+        .lower();
+  } else {
+    getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT}).maxScalar(0, sXLen);
+
+    getActionDefinitionsBuilder(G_SEXT_INREG).maxScalar(0, sXLen).lower();
+  }
+
   auto &ExtLoadActions =
       getActionDefinitionsBuilder({G_SEXTLOAD, G_ZEXTLOAD})
           .legalForTypesWithMemDesc({{s32, p0, s8, 8}, {s32, p0, s16, 16}});
