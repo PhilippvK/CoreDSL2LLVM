@@ -737,6 +737,11 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
                                        MRI.getType(Cur.getOperand(0).getReg()),
                                        Imm->getLimitedValue()));
   }
+  case TargetOpcode::G_IMPLICIT_DEF: {
+    return std::make_pair(SUCCESS, std::make_unique<ConstantNode>(
+                                       MRI.getType(Cur.getOperand(0).getReg()),
+                                       0));
+  }
   case TargetOpcode::G_ICMP: {
     auto Pred = Cur.getOperand(1);
     auto [Err, NodeL, NodeR] = traverseBinopOperands(MRI, Cur, 2);
