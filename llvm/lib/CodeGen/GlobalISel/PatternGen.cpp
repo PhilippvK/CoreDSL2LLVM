@@ -491,7 +491,12 @@ struct ConstantNode : public PatternNode {
       : PatternNode(PN_Constant, Type), Constant(c) {}
 
   std::string patternString(int Indent = 0) override {
-    return "(i32 " + std::to_string((int)Constant) + ")";
+    if (Type.isFixedVector()) {
+      std::string TypeStr = lltToString(Type);
+      return "(" + TypeStr + " (i32 " + std::to_string((int)Constant) + "))";
+    } else {
+      return "(i32 " + std::to_string((int)Constant) + ")";
+    }
   }
 
   static bool classof(const PatternNode *p) {
