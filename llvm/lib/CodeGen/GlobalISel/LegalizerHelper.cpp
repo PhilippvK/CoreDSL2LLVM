@@ -51,6 +51,19 @@ cl::opt<std::string> CustomLegalizerSettings(
     cl::desc("TODO"),
     cl::Hidden);
 
+
+std::vector<std::vector<LLT>> parse_types(std::string types_str) {
+    // return {{LLT::scalar(32)}};
+    const LLT s1 = LLT::scalar(1);
+    const LLT s8 = LLT::scalar(8);
+    const LLT s16 = LLT::scalar(16);
+    const LLT s32 = LLT::scalar(32);
+    const LLT s64 = LLT::scalar(64);
+    const LLT v2s16 = LLT::fixed_vector(2, s16);
+    const LLT v4s8 = LLT::fixed_vector(4, s8);
+    return {{v4s8}};
+}
+
 /// Try to break down \p OrigTy into \p NarrowTy sized pieces.
 ///
 /// Returns the number of \p NarrowTy elements needed to reconstruct \p OrigTy,
@@ -161,20 +174,80 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
     Query.print(dbgs());
     dbgs() << "\n";
   );
-  bool skipLegalization = false;
+  bool forceLegal = false;
   bool forceLower = false;
   if (!CustomLegalizerSettings.empty()) {
     std::cout << "Custom legalizer settings: " << CustomLegalizerSettings << std::endl;
-    if (name == "G_FSHR" || name == "G_CONSTANT_FOLD_BARRIER" || name == "G_IMPLICIT_DEF") {
-      skipLegalization = false;
-      forceLower = false;
-    } else if (name == "G_SEXT") {
-      skipLegalization = false;
-      forceLower = true;
-    } else {
-      skipLegalization = true;
-      forceLower = false;
+    std::string cur = CustomLegalizerSettings;
+    std::cout << "cur=" << cur << std::endl;
+    std::cout << "len=" << cur.size() << std::endl;
+    while (1) {
+        std::cout << "LOOP" << std::endl;
+        std::cout << "cur=" << cur << std::endl;
+        std::cout << "len=" << cur.size() << std::endl;
+        size_t colon_pos = cur.find(":");
+        if (colon_pos == std::string::npos) {
+            std::cout << "BREAK (no more ops found)" << std::endl;
+            break;
+        }
+        std::cout << "colon_pos=" << colon_pos << std::endl;
+        std::string op_name = cur.substr(0, colon_pos);
+        std::cout << "op_name=" << op_name << std::endl;
+        cur = cur.substr(colon_pos + 1, std::string::npos);
+        std::cout << "cur=" << cur << std::endl;
+        std::cout << "len=" << cur.size() << std::endl;
+        size_t sem_pos = cur.find(";");
+        std::cout << "sem_pos=" << sem_pos << std::endl;
+        std::string types_str = "";
+        if (sem_pos == std::string::npos) {
+            types_str = cur;
+            cur = "";
+        } else {
+            types_str = cur.substr(0, sem_pos - 1);
+            cur = cur.substr(sem_pos + 1, std::string::npos);
+        }
+        std::cout << "types_str" << types_str << std::endl;
+        if (op_name == name) {
+            std::cout << "OP MATCHES" << std::endl;
+            std::vector<std::vector<LLT>> allowed_types = parse_types(types_str);
+            for (auto cur_types: allowed_types) {
+                std::cout << "AUTO" << std::endl;
+                size_t num_matches = 0;
+                std::cout << "cur_types.size()=" << cur_types.size() << std::endl;
+                for (size_t j = 0; j < cur_types.size(); j++) {
+                    std::cout << "j=" << j << std::endl;
+                    if (cur_types[j] == Types[j]) {
+                        std::cout << "IF" << std::endl;
+                        num_matches++;
+                    } else {
+                        std::cout << "ELSE" << std::endl;
+                    }
+                    // std::cout << "cur_types[j]=" << cur_types[j] << std::endl;
+                    assert(j < Types.size() && "TypeIdx out of bounds");
+                    // std::cout << "Types[j]=" << Types[j] << std::endl;
+                }
+                std::cout << "num_matches=" << num_matches << std::endl;
+                if (num_matches == cur_types.size()) {
+                    forceLegal = true;
+                    break;
+                }
+            }
+            // TODO: check types
+            break;  // Assuming that only one mapping per op exists
+        }
     }
+    std::cout << "forceLegal=" << forceLegal << std::endl;
+    std::cout << "forceLower=" << forceLegal << std::endl;
+    // if (name == "G_FSHR" || name == "G_CONSTANT_FOLD_BARRIER" || name == "G_IMPLICIT_DEF") {
+    //   forceLegal = false;
+    //   forceLower = false;
+    // } else if (name == "G_SEXT") {
+    //   forceLegal = false;
+    //   forceLower = true;
+    // } else {
+    //   forceLegal = true;
+    //   forceLower = false;
+    // }
     // struct LegalityQuery { unsigned Opcode; ArrayRef<LLT> Types; (...)}
     // how to convert opcode to string? (or the other way around?)
     // Opcodes are defined here in for build:
@@ -191,7 +264,7 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
     LLVM_DEBUG(dbgs() << ".. Lowered by user\n");
     return lower(MI, 0, LLT{});
   }
-  if (skipLegalization) {
+  if (forceLegal) {
     LLVM_DEBUG(dbgs() << ".. Legalized by user\n");
     return AlreadyLegal;
   }
