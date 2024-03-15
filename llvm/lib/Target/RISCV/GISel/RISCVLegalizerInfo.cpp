@@ -73,11 +73,10 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   const LLT nxv4s64 = LLT::scalable_vector(4, s64);
   const LLT nxv8s64 = LLT::scalable_vector(8, s64);
 
-  const LLT v4i8 = LLT::fixed_vector(4, LLT::scalar(8));
   const LLT v4s8 = LLT::fixed_vector(4, LLT::scalar(8));
-  const LLT v2i16 = LLT::fixed_vector(2, LLT::scalar(16));
   const LLT v2s16 = LLT::fixed_vector(2, LLT::scalar(16));
-  const LLT v4i1 = LLT::fixed_vector(4, LLT::scalar(1));
+  const LLT v4s1 = LLT::fixed_vector(4, LLT::scalar(1));
+  const LLT v2s1 = LLT::fixed_vector(4, LLT::scalar(1));
 
   using namespace TargetOpcode;
 
@@ -179,7 +178,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
 
   getActionDefinitionsBuilder({G_CONSTANT, G_IMPLICIT_DEF})
       .legalFor({s32, sXLen, p0})
-      .legalFor({v4s8})
+      .legalFor({v4s8, v2s16})
       .widenScalarToNextPow2(0)
       .clampScalar(0, s32, sXLen);
 
@@ -213,8 +212,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
     //     // .maxScalarOrElt(1, s32)
     //     // .minScalarOrElt(1, s8)
     //     // .lower();
-    //     .lowerFor({{v4i8, v4i1}})
-    //     .legalFor({{v4i8, v4i1}});
+    //     .lowerFor({{v4s8, v4s1}})
+    //     .legalFor({{v4s8, v4s1}});
   getActionDefinitionsBuilder(G_TRUNC)
       // .legalFor({{v2s32, v2s64}, {v4s16, v4s32}, {v8s8, v8s16}})
       .moreElementsToNextPow2(0)
@@ -232,19 +231,63 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .alwaysLegal();
   if (ST.hasGPR32V()) {
     LoadStoreActions
-      .bitcastIf(LegalityPredicates::typeIs(0, v4i8), LegalizeMutations::changeTo(0, LLT::scalar(32)))
-      .bitcastIf(LegalityPredicates::typeIs(1, v4i8), LegalizeMutations::changeTo(1, LLT::scalar(32)))
-      .bitcastIf(LegalityPredicates::typeIs(0, s32), LegalizeMutations::changeTo(0, v4i8))
-      .bitcastIf(LegalityPredicates::typeIs(1, s32), LegalizeMutations::changeTo(1, v4i8));
+      .bitcastIf(LegalityPredicates::typeIs(0, v4s8), LegalizeMutations::changeTo(0, LLT::scalar(32)))
+      .bitcastIf(LegalityPredicates::typeIs(1, v4s8), LegalizeMutations::changeTo(1, LLT::scalar(32)))
+      .bitcastIf(LegalityPredicates::typeIs(0, s32), LegalizeMutations::changeTo(0, v4s8))
+      .bitcastIf(LegalityPredicates::typeIs(1, s32), LegalizeMutations::changeTo(1, v4s8))
+      .bitcastIf(LegalityPredicates::typeIs(0, v2s16), LegalizeMutations::changeTo(0, LLT::scalar(32)))
+      .bitcastIf(LegalityPredicates::typeIs(1, v2s16), LegalizeMutations::changeTo(1, LLT::scalar(32)))
+      .bitcastIf(LegalityPredicates::typeIs(0, s32), LegalizeMutations::changeTo(0, v2s16));
+      // .bitcastIf(LegalityPredicates::typeIs(0, v4s8), LegalizeMutations::changeTo(0, p0))
+      // .bitcastIf(LegalityPredicates::typeIs(1, v4s8), LegalizeMutations::changeTo(1, p0))
+      // .bitcastIf(LegalityPredicates::typeIs(0, p0), LegalizeMutations::changeTo(0, v4s8))
+      // .bitcastIf(LegalityPredicates::typeIs(1, p0), LegalizeMutations::changeTo(1, v4s8))
+      // .bitcastIf(LegalityPredicates::typeIs(0, v2s16), LegalizeMutations::changeTo(0, p0))
+      // .bitcastIf(LegalityPredicates::typeIs(1, v2s16), LegalizeMutations::changeTo(1, p0))
+      // .bitcastIf(LegalityPredicates::typeIs(0, p0), LegalizeMutations::changeTo(0, v2s16))
+      // .bitcastIf(LegalityPredicates::typeIs(1, p0), LegalizeMutations::changeTo(1, v2s16));
 
     // allow bitcasting back and forth between vector and scalar
     getActionDefinitionsBuilder(G_BITCAST)
         .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, s32),
-                                         LegalityPredicates::typeIs(1, v4i8)))
+                                         LegalityPredicates::typeIs(1, v4s8)))
         .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s32),
-                                         LegalityPredicates::typeIs(0, v4i8)));
+                                         LegalityPredicates::typeIs(0, v4s8)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, s32),
+                                         LegalityPredicates::typeIs(1, v2s16)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s32),
+                                         LegalityPredicates::typeIs(0, v2s16)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, p0),
+                                         LegalityPredicates::typeIs(1, v4s8)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, p0),
+                                         LegalityPredicates::typeIs(0, v4s8)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, p0),
+                                         LegalityPredicates::typeIs(1, v2s16)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, p0),
+                                         LegalityPredicates::typeIs(0, v2s16)));
 
-    getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).clampScalar(1, s8, s32).clampScalar(2, s8, s32).legalFor({v4i8});
+    getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
+        .legalFor({v4s8, v2s16})
+        // .legalFor({v2s8})
+        // .minScalarOrEltIf(
+        //     [=](const LegalityQuery &Query) { return Query.Types[1] == v2s8; },
+        //     1, s16)
+        // .minScalarOrEltIf(
+        //     [=](const LegalityQuery &Query) {
+        //       return Query.Types[1].getNumElements() == 2;
+        //     },
+        //     0, s16)
+        // .widenVectorEltsToVectorMinSize(0, 32)
+        .clampScalar(2, s8, s32)
+        .clampNumElements(0, v4s8, v4s8)
+        .clampNumElements(0, v2s16, v2s16);
+        // .clampNumElements(1, v4s8, v4s8)
+        // .clampNumElements(1, v2s16, v2s16)
+        // .moreElementsToNextPow2(1)
+        // .widenScalarOrEltToNextPow2(1)
+        // .widenScalarOrEltToNextPow2(0)
+        // .clampScalar(1, s8, s32
+        // .lower();
 
     getActionDefinitionsBuilder(G_BUILD_VECTOR)
         .legalFor({{v4s8, s8},
@@ -255,22 +298,21 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
         // .widenVectorEltsToVectorMinSize(0, 64)
         .minScalarSameAs(1, 0);
 
-    ArithActions.legalFor({v4i8});
-    ShiftActions.legalFor({{v4i8, v4i8}});
-    // getActionDefinitionsBuilder(G_ICMP)
-    //     .legalFor({{v4i1, v4i8}});
+    // ArithActions.legalFor({v4s8, v2s16});
+    // ShiftActions.legalFor({{v4s8, v4s8}, {v2s16, v2s16}});
     getActionDefinitionsBuilder(G_ICMP)
-      // .legalFor({{v4i1, v4i8}})
+      // .legalFor({{v4s1, v4s8}})
       .legalFor({
-                 {v4i8, v4i8},
+                 {v4s8, v4s8},
+                 {v2s16, v2s16},
                  })
       .widenScalarOrEltToNextPow2(1)
       // .clampScalar(1, s32, s64)
       // .clampScalar(0, s32, s32)
-
       .minScalarOrElt(0, s8) // Worst case, we need at least s8.
       .moreElementsToNextPow2(1)
       .clampMaxNumElements(1, s8, 4)
+      .clampMaxNumElements(1, s16, 2)
 
       .minScalarEltSameAsIf(
           [=](const LegalityQuery &Query) {
@@ -281,17 +323,21 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
           },
           0, 1)
       .minScalarOrEltIf(
-          [=](const LegalityQuery &Query) { return Query.Types[1] == v4i8; },
+          [=](const LegalityQuery &Query) { return Query.Types[1] == v4s8; },
+          1, s32)
+      .minScalarOrEltIf(
+          [=](const LegalityQuery &Query) { return Query.Types[1] == v2s16; },
           1, s32)
       // .minScalarOrEltIf(
-      //     [=](const LegalityQuery &Query) { return Query.Types[1] == v4i8; },
+      //     [=](const LegalityQuery &Query) { return Query.Types[1] == v4s8; },
       //     0, s8)
       .moreElementsToNextPow2(1)
-      .clampNumElements(1, v4i8, v4i8);
+      .clampNumElements(1, v4s8, v4s8)
+      .clampNumElements(1, v2s16, v2s16);
 
       getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
         // .alwaysLegal();
-        .lowerFor({v4s8});
+        .lowerFor({v4s8, v2s16});
       getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
         .alwaysLegal();
         // .legalIf([=](const LegalityQuery &Query) {
