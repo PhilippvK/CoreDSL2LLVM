@@ -74,6 +74,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   const LLT nxv8s64 = LLT::scalable_vector(8, s64);
 
   const LLT v4s8 = LLT::fixed_vector(4, LLT::scalar(8));
+  const LLT v2s8 = LLT::fixed_vector(2, LLT::scalar(8));
   const LLT v2s16 = LLT::fixed_vector(2, LLT::scalar(16));
   const LLT v4s1 = LLT::fixed_vector(4, LLT::scalar(1));
   const LLT v2s1 = LLT::fixed_vector(4, LLT::scalar(1));
@@ -179,6 +180,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   getActionDefinitionsBuilder({G_CONSTANT, G_IMPLICIT_DEF})
       .legalFor({s32, sXLen, p0})
       .legalFor({v4s8, v2s16})
+      .legalFor({v2s8})
       .widenScalarToNextPow2(0)
       .clampScalar(0, s32, sXLen);
 
@@ -368,7 +370,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
         .maxScalar(0, sXLen)
         .lower();
   } else {
-    getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT}).maxScalar(0, sXLen);
+    // getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT}).maxScalar(0, sXLen);
+    getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT}).legalFor({{v2s16, v2s8}}).maxScalar(0, sXLen);
 
     getActionDefinitionsBuilder(G_SEXT_INREG).maxScalar(0, sXLen).lower();
   }
