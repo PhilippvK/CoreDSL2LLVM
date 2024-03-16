@@ -11,7 +11,7 @@
 /// primary legalization.
 //
 //===----------------------------------------------------------------------===//
-#include <iostream>
+// #include <iostream>
 
 #include "llvm/CodeGen/GlobalISel/LegalizerHelper.h"
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
@@ -51,9 +51,87 @@ cl::opt<std::string> CustomLegalizerSettings(
     cl::desc("TODO"),
     cl::Hidden);
 
+LLT parse_type(std::string type_str) {
+    // std::cout << "parse_type(" << type_str << ")" << std::endl;
+    LLT ret = LLT{};
+    assert(type_str.size() > 0 && "got empty type string");
+    int scalar_size = 0;
+    if (type_str.at(0) == 'v') {  // vector
+         // std::cout << "VECTOR" << std::endl;
+         size_t s_pos = type_str.find("s");
+         // std::cout << "s_pos=" << s_pos << std::endl;
+         assert(s_pos != std::string::npos && "expected s in type string");
+         std::string num_elem_str = type_str.substr(1, s_pos - 1);
+         // std::cout << "num_elem_str" << num_elem_str << std::endl;
+         int num_elem = std::stoi(num_elem_str);
+         std::string scalar_size_str = type_str.substr(s_pos + 1, std::string::npos);
+         // std::cout << "scalar_size_str" << scalar_size_str << std::endl;
+         scalar_size = std::stoi(scalar_size_str);
+         ret = LLT::fixed_vector(num_elem, LLT::scalar(scalar_size));
+    } else {  // scalar
+         // TODO: pointers
+         // std::cout << "SCALAR" << std::endl;
+         std::string scalar_size_str = type_str.substr(1, std::string::npos);
+         int scalar_size = std::stoi(scalar_size_str);
+         // std::cout << "scalar_size_str" << scalar_size_str << std::endl;
+         scalar_size = std::stoi(scalar_size_str);
+         ret = LLT::scalar(scalar_size);
+    }
+    return ret;
+}
+
+std::vector<LLT> parse_types_set(std::string types_set_str) {
+    // std::cout << "parse_set_types(" << types_set_str << ")" << std::endl;
+    std::vector<LLT> ret{};
+    std::string cur = types_set_str;
+    assert(cur.size() > 0 && "got empty types set string");
+    while (cur.size() > 0) {
+        size_t com_pos = cur.find(";");
+        std::string temp = "";
+        if (com_pos == std::string::npos) {
+            temp = cur.substr(0, std::string::npos);
+            cur = "";
+        } else {
+            temp = cur.substr(0, com_pos - 1);
+            cur = cur.substr(com_pos + 1, std::string::npos);
+        }
+        LLT llt = parse_type(temp);
+        ret.push_back(llt);
+    }
+    assert(ret.size() > 0 && "no types found");
+    return ret;
+}
 
 std::vector<std::vector<LLT>> parse_types(std::string types_str) {
-    // return {{LLT::scalar(32)}};
+    // std::cout << "parse_types(" << types_str << ")" << std::endl;
+    std::vector<std::vector<LLT>> ret{};
+    std::string cur = types_str;
+    assert(cur.at(0) == '[' && "expected [ in types_str");
+    assert(cur.at(cur.size() - 1) == ']' && "expected ] in types_str");
+    cur = cur.substr(1, cur.size() - 2);
+    // std::cout << "cur=" << cur << std::endl;
+    // std::cout << "len=" << cur.size() << std::endl;
+    while (cur.size() > 0) {
+        // std::cout << "LOOP2" << std::endl;
+        // std::cout << "cur=" << cur << std::endl;
+        // std::cout << "len=" << cur.size() << std::endl;
+        assert(cur.at(0) == '{' && "expected { in types_str");
+        size_t br_pos = cur.find("}");
+        // std::cout << "br_pos=" << br_pos << std::endl;
+        assert(br_pos != std::string::npos && "found no matching }");
+        std::string types_set_str = cur.substr(1, br_pos - 1);
+        // std::cout << "types_set_str" << types_set_str << std::endl;
+        std::vector<LLT> temp = parse_types_set(types_set_str);
+        ret.push_back(temp);
+        cur = cur.substr(br_pos + 1, std::string::npos);
+        // std::cout << "cur=" << cur << std::endl;
+        // std::cout << "len=" << cur.size() << std::endl;
+        if (cur.size() == 0) {
+            break;
+        }
+        assert(cur.at(0) == ',' && "expected , in types_str");
+        cur = cur.substr(1, std::string::npos);
+    }
     const LLT s1 = LLT::scalar(1);
     const LLT s8 = LLT::scalar(8);
     const LLT s16 = LLT::scalar(16);
@@ -61,7 +139,7 @@ std::vector<std::vector<LLT>> parse_types(std::string types_str) {
     const LLT s64 = LLT::scalar(64);
     const LLT v2s16 = LLT::fixed_vector(2, s16);
     const LLT v4s8 = LLT::fixed_vector(4, s8);
-    return {{v4s8}};
+    return ret;
 }
 
 /// Try to break down \p OrigTy into \p NarrowTy sized pieces.
@@ -177,27 +255,27 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
   bool forceLegal = false;
   bool forceLower = false;
   if (!CustomLegalizerSettings.empty()) {
-    std::cout << "Custom legalizer settings: " << CustomLegalizerSettings << std::endl;
+    // std::cout << "Custom legalizer settings: " << CustomLegalizerSettings << std::endl;
     std::string cur = CustomLegalizerSettings;
-    std::cout << "cur=" << cur << std::endl;
-    std::cout << "len=" << cur.size() << std::endl;
+    // std::cout << "cur=" << cur << std::endl;
+    // std::cout << "len=" << cur.size() << std::endl;
     while (1) {
-        std::cout << "LOOP" << std::endl;
-        std::cout << "cur=" << cur << std::endl;
-        std::cout << "len=" << cur.size() << std::endl;
+        // std::cout << "LOOP" << std::endl;
+        // std::cout << "cur=" << cur << std::endl;
+        // std::cout << "len=" << cur.size() << std::endl;
         size_t colon_pos = cur.find(":");
         if (colon_pos == std::string::npos) {
-            std::cout << "BREAK (no more ops found)" << std::endl;
+            // std::cout << "BREAK (no more ops found)" << std::endl;
             break;
         }
-        std::cout << "colon_pos=" << colon_pos << std::endl;
+        // std::cout << "colon_pos=" << colon_pos << std::endl;
         std::string op_name = cur.substr(0, colon_pos);
-        std::cout << "op_name=" << op_name << std::endl;
+        // std::cout << "op_name=" << op_name << std::endl;
         cur = cur.substr(colon_pos + 1, std::string::npos);
-        std::cout << "cur=" << cur << std::endl;
-        std::cout << "len=" << cur.size() << std::endl;
+        // std::cout << "cur=" << cur << std::endl;
+        // std::cout << "len=" << cur.size() << std::endl;
         size_t sem_pos = cur.find(";");
-        std::cout << "sem_pos=" << sem_pos << std::endl;
+        // std::cout << "sem_pos=" << sem_pos << std::endl;
         std::string types_str = "";
         if (sem_pos == std::string::npos) {
             types_str = cur;
@@ -206,27 +284,29 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
             types_str = cur.substr(0, sem_pos - 1);
             cur = cur.substr(sem_pos + 1, std::string::npos);
         }
-        std::cout << "types_str" << types_str << std::endl;
+        // std::cout << "types_str" << types_str << std::endl;
+        // std::cout << "op_name |" << op_name << "|" << std::endl;
+        // std::cout << "name |" << name << "|" << std::endl;
         if (op_name == name) {
-            std::cout << "OP MATCHES" << std::endl;
+            // std::cout << "OP MATCHES" << std::endl;
             std::vector<std::vector<LLT>> allowed_types = parse_types(types_str);
             for (auto cur_types: allowed_types) {
-                std::cout << "AUTO" << std::endl;
+                // std::cout << "AUTO" << std::endl;
                 size_t num_matches = 0;
-                std::cout << "cur_types.size()=" << cur_types.size() << std::endl;
+                // std::cout << "cur_types.size()=" << cur_types.size() << std::endl;
                 for (size_t j = 0; j < cur_types.size(); j++) {
-                    std::cout << "j=" << j << std::endl;
+                    // std::cout << "j=" << j << std::endl;
                     if (cur_types[j] == Types[j]) {
-                        std::cout << "IF" << std::endl;
+                        // std::cout << "IF" << std::endl;
                         num_matches++;
                     } else {
-                        std::cout << "ELSE" << std::endl;
+                        // std::cout << "ELSE" << std::endl;
                     }
                     // std::cout << "cur_types[j]=" << cur_types[j] << std::endl;
                     assert(j < Types.size() && "TypeIdx out of bounds");
                     // std::cout << "Types[j]=" << Types[j] << std::endl;
                 }
-                std::cout << "num_matches=" << num_matches << std::endl;
+                // std::cout << "num_matches=" << num_matches << std::endl;
                 if (num_matches == cur_types.size()) {
                     forceLegal = true;
                     break;
@@ -235,9 +315,12 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
             // TODO: check types
             break;  // Assuming that only one mapping per op exists
         }
+        if (forceLegal) {
+            break;
+        }
     }
-    std::cout << "forceLegal=" << forceLegal << std::endl;
-    std::cout << "forceLower=" << forceLegal << std::endl;
+    // std::cout << "forceLegal=" << forceLegal << std::endl;
+    // std::cout << "forceLower=" << forceLower << std::endl;
     // if (name == "G_FSHR" || name == "G_CONSTANT_FOLD_BARRIER" || name == "G_IMPLICIT_DEF") {
     //   forceLegal = false;
     //   forceLower = false;
@@ -255,7 +338,7 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
     //    G_ADD   = 47,
     //    /* 138128 */ "G_ADD\0"
   } else {
-    std::cout << "Custom legalizer settings missing! " << std::endl;
+    // std::cout << "Custom legalizer settings missing! " << std::endl;
   }
 
   if (isa<GIntrinsic>(MI))
