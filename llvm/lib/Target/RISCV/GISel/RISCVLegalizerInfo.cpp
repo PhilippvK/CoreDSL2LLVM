@@ -199,10 +199,15 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
                                      {s32, p0, s32, 32},
                                      {p0, p0, sXLen, XLen}});
   if (ST.hasFastUnalignedAccess())
-    LoadStoreActions.legalForTypesWithMemDesc({{s32, p0, s8, 8},
-                                               {s32, p0, s16, 8},
-                                               {s32, p0, s32, 8},
-                                               {p0, p0, sXLen, 8}});
+    LoadStoreActions.legalForTypesWithMemDesc({
+        {s32, p0, s8, 8},
+        {s32, p0, s16, 8},
+        {s32, p0, s32, 8},
+        {p0, p0, sXLen, 8},
+        {s32, p0, s16, 16},
+        {s32, p0, s32, 16},
+        {p0, p0, sXLen, 16},
+    });
 
     // getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT})
     //     // .scalarize(0)
