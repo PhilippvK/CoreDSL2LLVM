@@ -284,7 +284,7 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
             types_str = cur;
             cur = "";
         } else {
-            types_str = cur.substr(0, sem_pos - 1);
+            types_str = cur.substr(0, sem_pos);
             cur = cur.substr(sem_pos + 1, std::string::npos);
         }
         // std::cout << "types_str" << types_str << std::endl;
@@ -305,9 +305,7 @@ LegalizerHelper::legalizeInstrStep(MachineInstr &MI,
                     } else {
                         // std::cout << "ELSE" << std::endl;
                     }
-                    // std::cout << "cur_types[j]=" << cur_types[j] << std::endl;
                     assert(j < Types.size() && "TypeIdx out of bounds");
-                    // std::cout << "Types[j]=" << Types[j] << std::endl;
                 }
                 // std::cout << "num_matches=" << num_matches << std::endl;
                 if (num_matches == cur_types.size()) {
