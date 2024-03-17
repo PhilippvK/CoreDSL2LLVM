@@ -274,8 +274,9 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
                                          LegalityPredicates::typeIs(0, v2s16)));
 
     getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
+        .clampScalar(2, s8, s32)
         .legalFor({v4s8, v2s16})
-        // .legalFor({v2s8})
+        .legalFor({v2s8})
         // .minScalarOrEltIf(
         //     [=](const LegalityQuery &Query) { return Query.Types[1] == v2s8; },
         //     1, s16)
@@ -285,7 +286,6 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
         //     },
         //     0, s16)
         // .widenVectorEltsToVectorMinSize(0, 32)
-        .clampScalar(2, s8, s32)
         .clampNumElements(0, v4s8, v4s8)
         .clampNumElements(0, v2s16, v2s16);
         // .clampNumElements(1, v4s8, v4s8)

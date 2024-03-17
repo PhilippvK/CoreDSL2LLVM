@@ -341,6 +341,7 @@ struct BinopNode : public PatternNode {
         Right(std::move(Right)) {}
 
   std::string patternString(int Indent = 0) override {
+    llvm::outs() << "BinopNode.patternString" << "\n";
     static const std::unordered_map<int, std::string> BinopStr = {
         {TargetOpcode::G_ADD, "add"},
         {TargetOpcode::G_SUB, "sub"},
@@ -576,6 +577,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur);
 
 static std::pair<PatternError, std::unique_ptr<PatternNode>>
 traverseOperand(MachineRegisterInfo &MRI, MachineInstr &Cur, int i) {
+  llvm::outs() << "traverseOperand" << '\n';
   assert(Cur.getOperand(1).isReg() && "expected register");
   auto *Op = MRI.getOneDef(Cur.getOperand(1).getReg());
   if (!Op)
@@ -591,6 +593,7 @@ static std::tuple<PatternError, std::unique_ptr<PatternNode>,
                   std::unique_ptr<PatternNode>, std::unique_ptr<PatternNode>>
 traverseTernopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
                       int start = 1) {
+  llvm::outs() << "traverseTernOperands" << '\n';
   assert(Cur.getOperand(start).isReg() && "expected register");
   auto *First = MRI.getOneDef(Cur.getOperand(start).getReg());
   if (!First)
@@ -623,28 +626,35 @@ static std::tuple<PatternError, std::unique_ptr<PatternNode>,
                   std::unique_ptr<PatternNode>>
 traverseBinopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
                       int start = 1) {
+  llvm::outs() << "traverseBinpOperands" << '\n';
+  llvm::outs() << "A" << "\n";
   assert(Cur.getOperand(start).isReg() && "expected register");
   auto *LHS = MRI.getOneDef(Cur.getOperand(start).getReg());
   if (!LHS)
     return std::make_tuple(PatternError(FORMAT, &Cur), nullptr, nullptr);
+  llvm::outs() << "B" << "\n";
   assert(Cur.getOperand(start + 1).isReg() && "expected register");
   auto *RHS = MRI.getOneDef(Cur.getOperand(start + 1).getReg());
   if (!RHS)
     return std::make_tuple(PatternError(FORMAT, &Cur), nullptr, nullptr);
+  llvm::outs() << "C" << "\n";
 
   auto [ErrL, NodeL] = traverse(MRI, *LHS->getParent());
   if (ErrL)
     return std::make_tuple(ErrL, nullptr, nullptr);
+  llvm::outs() << "D" << "\n";
 
   auto [ErrR, NodeR] = traverse(MRI, *RHS->getParent());
   if (ErrR)
     return std::make_tuple(ErrR, nullptr, nullptr);
+  llvm::outs() << "E" << "\n";
   return std::make_tuple(SUCCESS, std::move(NodeL), std::move(NodeR));
 }
 
 static std::tuple<PatternError, std::unique_ptr<PatternNode>>
 traverseUnopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
                       int start = 1) {
+  llvm::outs() << "traverseUnpOperands" << '\n';
   assert(Cur.getOperand(start).isReg() && "expected register");
   auto *RHS = MRI.getOneDef(Cur.getOperand(start).getReg());
   if (!RHS)
@@ -659,7 +669,7 @@ traverseUnopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
 static std::tuple<PatternError, std::vector<std::unique_ptr<PatternNode>>>
 traverseNOpOperands(MachineRegisterInfo &MRI, MachineInstr &Cur, size_t N,
                       int start = 1) {
-  // llvm::outs() << "traverseNOpOperands" << '\n';
+  llvm::outs() << "traverseNOpOperands" << '\n';
   std::vector<std::unique_ptr<PatternNode>> operands(N);
   for (size_t i = 0; i < N; i++) {
       // llvm::outs() << "i=" << i << '\n';
@@ -707,6 +717,7 @@ static auto getArgInfo(MachineRegisterInfo &MRI, Register Reg) {
 static std::pair<PatternError, std::unique_ptr<PatternNode>>
 traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
 
+  llvm::outs() << "traverse " << Cur.getOpcode() << '\n';
   switch (Cur.getOpcode()) {
   case TargetOpcode::G_BUILD_VECTOR: {
     // llvm::outs() << "case TargetOpcode::G_BUILD_VECTOR" << '\n';
@@ -782,15 +793,19 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
   case TargetOpcode::G_SHL:
   case TargetOpcode::G_LSHR:
   case TargetOpcode::G_ASHR: {
+    llvm::outs() << "binop" << '\n';
+    llvm::outs() << "11" << '\n';
 
     auto [Err, NodeL, NodeR] = traverseBinopOperands(MRI, Cur);
     if (Err)
       return std::make_pair(Err, nullptr);
+    llvm::outs() << "22" << '\n';
 
     assert(Cur.getOperand(0).isReg() && "expected register");
     auto Node = std::make_unique<BinopNode>(
         MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
         std::move(NodeL), std::move(NodeR));
+    llvm::outs() << "33" << '\n';
 
     return std::make_pair(SUCCESS, std::move(Node));
   }
@@ -799,6 +814,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
   case TargetOpcode::G_VECREDUCE_ADD:
   case TargetOpcode::G_TRUNC:
   case TargetOpcode::G_ABS: {
+    llvm::outs() << "unop" << '\n';
 
     auto [Err, NodeR] = traverseUnopOperands(MRI, Cur);
     if (Err)
@@ -812,6 +828,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     return std::make_pair(SUCCESS, std::move(Node));
   }
   case TargetOpcode::G_BITCAST: {
+    llvm::outs() << "bitcast" << '\n';
     assert(Cur.getOperand(1).isReg() && "expected register");
     auto *Operand = MRI.getOneDef(Cur.getOperand(1).getReg());
     if (!Operand)
@@ -833,22 +850,31 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     return std::make_pair(SUCCESS, std::move(Node));
   }
   case TargetOpcode::G_LOAD: {
+    llvm::outs() << "load" << '\n';
     assert(Cur.getOperand(1).isReg() && "expected register");
     auto *Addr = MRI.getOneDef(Cur.getOperand(1).getReg());
     if (!Addr)
       return std::make_pair(PatternError(FORMAT_LOAD, &Cur), nullptr);
+    llvm::outs() << "a1" << '\n';
     auto *AddrI = Addr->getParent();
-    if (AddrI->getOpcode() != TargetOpcode::COPY)
+    if (AddrI->getOpcode() != TargetOpcode::COPY) {
+      if (AddrI->getOpcode() == TargetOpcode::G_PTR_ADD) {
+          llvm::outs() << "G_PTR_ADD not implemented!" << '\n';
+      }
       return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
+    }
+    llvm::outs() << "a2" << '\n';
 
     assert(Cur.getOperand(1).isReg() && "expected register");
     auto AddrLI = AddrI->getOperand(1).getReg();
     if (!MRI.isLiveIn(AddrLI) || !AddrLI.isPhysical())
       return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
+    llvm::outs() << "a3" << '\n';
 
     auto [Idx, Field] = getArgInfo(MRI, AddrLI);
     if (Field == nullptr)
       return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
+    llvm::outs() << "a4" << '\n';
 
     PatternArgs[Idx].ArgTypeStr =
         lltToRegTypeStr(MRI.getType(Cur.getOperand(0).getReg()));
@@ -862,6 +888,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     return std::make_pair(SUCCESS, std::move(Node));
   }
   case TargetOpcode::G_CONSTANT: {
+    llvm::outs() << "constant" << '\n';
     auto *Imm = Cur.getOperand(1).getCImm();
     assert(Cur.getOperand(0).isReg() && "expected register");
     return std::make_pair(SUCCESS, std::make_unique<ConstantNode>(
@@ -869,12 +896,14 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
                                        Imm->getLimitedValue()));
   }
   case TargetOpcode::G_IMPLICIT_DEF: {
+    llvm::outs() << "impl" << '\n';
     assert(Cur.getOperand(0).isReg() && "expected register");
     return std::make_pair(SUCCESS, std::make_unique<ConstantNode>(
                                        MRI.getType(Cur.getOperand(0).getReg()),
                                        0));
   }
   case TargetOpcode::G_ICMP: {
+    llvm::outs() << "icmp" << '\n';
     auto Pred = Cur.getOperand(1);
     auto [Err, NodeL, NodeR] = traverseBinopOperands(MRI, Cur, 2);
     if (Err)
@@ -887,6 +916,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
                                        std::move(NodeL), std::move(NodeR)));
   }
   case TargetOpcode::COPY: {
+    llvm::outs() << "copy" << '\n';
     // Immediate Operands
     assert(Cur.getOperand(1).isReg() && "expected register");
     auto Reg = Cur.getOperand(1).getReg();
@@ -906,6 +936,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
                                        Field->type & CDSLInstr::SIGNED));
   }
   }
+  llvm::outs() << "unhandled" << '\n';
 
   return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
 }
