@@ -605,6 +605,9 @@ foreach m = LMULList in {
 def FFLAGS : RISCVReg<0, "fflags">;
 def FRM    : RISCVReg<0, "frm">;
 
+// Shadow Stack register
+def SSP    : RISCVReg<0, "ssp">;
+
 // LLVMGEN: CORE-V SIMD Register Info
 def PulpV2 : RegisterClass<"RISCV", [v2i16], 32, (add
     (sequence "X%u", 10, 17),
@@ -627,6 +630,3 @@ def PulpV4 : RegisterClass<"RISCV", [v4i8], 32, (add
   )> {
     let RegInfos = XLenRI;
 }
-
-// Shadow Stack register
-def SSP    : RISCVReg<0, "ssp">;

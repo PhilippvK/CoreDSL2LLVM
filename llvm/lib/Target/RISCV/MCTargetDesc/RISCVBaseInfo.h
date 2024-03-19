@@ -309,6 +309,8 @@ enum OperandType : unsigned {
   OPERAND_CLUI_IMM,
   OPERAND_VTYPEI10,
   OPERAND_VTYPEI11,
+  // RISCVBaseInfo.h - riscv_operands - INSERTION_START
+  // RISCVBaseInfo.h - riscv_operands - INSERTION_END
   OPERAND_RVKRNUM,
   OPERAND_RVKRNUM_0_7,
   OPERAND_RVKRNUM_1_10,

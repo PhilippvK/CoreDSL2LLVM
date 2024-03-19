@@ -50,6 +50,8 @@ static cl::opt<bool> SkipPat("skip-patterns", cl::desc("Skip pattern-gen step.")
                           cl::cat(ToolOptions));
 static cl::opt<bool> SkipVerify("skip-verify", cl::desc("Skip verification step."),
                           cl::cat(ToolOptions));
+static cl::opt<bool> PrintIR("print-ir", cl::desc("Print LLVM-IR module."),
+                          cl::cat(ToolOptions));
 
 static cl::opt<std::string> ExtName("ext", cl::desc("Target extension"),
                                     cl::cat(ToolOptions), cl::init("ExtXcvsimd"));
@@ -65,6 +67,9 @@ static cl::opt<char>
              cl::desc("Optimization level. [-O0, -O1, -O2, or -O3] "
                       "(default = '-O3')"),
              cl::cat(ToolOptions), cl::init('3'));
+
+static cl::opt<std::string> Predicates(
+    "p", cl::desc("Predicate(s) used for instructions in output TableGen"), cl::cat(ToolOptions), cl::init("HasVendorXCValu"));
 
 #include <iostream>
 namespace fs = std::filesystem;
@@ -120,7 +125,8 @@ int main(int argc, char **argv) {
     if (verifyModule(*mod, &errs()))
       return -1;
 
-  // TODO: use force
+  if (PrintIR)
+    llvm::outs() << *mod << "\n";
 
   llvm::CodeGenOptLevel Opt;
   switch (OptLevel) {
@@ -138,12 +144,19 @@ int main(int argc, char **argv) {
     break;
   }
 
-  OptimizeBehavior(mod.get(), instrs, irOut, ExtName, Opt, Mattr);
+  PGArgsStruct Args{.ExtName = ExtName,
+                    .Mattr = Mattr,
+                    .OptLevel = Opt,
+                    .Predicates = Predicates};
+
+  OptimizeBehavior(mod.get(), instrs, irOut, Args);
+  if (PrintIR)
+    llvm::outs() << *mod << "\n";
   if (!SkipFmt)
     PrintInstrsAsTableGen(instrs, formatOut);
 
   if (!SkipPat)
-    if (GeneratePatterns(mod.get(), instrs, patternOut, ExtName, Mattr))
+    if (GeneratePatterns(mod.get(), instrs, patternOut, Args))
       return -1;
   return 0;
 }

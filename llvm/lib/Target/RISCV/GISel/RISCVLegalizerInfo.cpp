@@ -76,6 +76,12 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   const LLT nxv4s64 = LLT::scalable_vector(4, s64);
   const LLT nxv8s64 = LLT::scalable_vector(8, s64);
 
+  const LLT v4s8 = LLT::fixed_vector(4, LLT::scalar(8));
+  const LLT v2s8 = LLT::fixed_vector(2, LLT::scalar(8));
+  const LLT v2s16 = LLT::fixed_vector(2, LLT::scalar(16));
+  const LLT v4s1 = LLT::fixed_vector(4, LLT::scalar(1));
+  const LLT v2s1 = LLT::fixed_vector(4, LLT::scalar(1));
+
   using namespace TargetOpcode;
 
   auto &ArithActions =
@@ -89,7 +95,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
                     nxv32s16, nxv1s32, nxv2s32, nxv4s32, nxv8s32, nxv16s32,
                     nxv1s64,  nxv2s64, nxv4s64, nxv8s64};
 
-  getActionDefinitionsBuilder({G_ADD, G_SUB, G_AND, G_OR, G_XOR})
+  auto &ArithActions = getActionDefinitionsBuilder({G_ADD, G_SUB, G_AND, G_OR, G_XOR})
       .legalFor({s32, sXLen})
       .legalIf(all(
           typeInSet(0, AllVecTys),
@@ -116,20 +122,6 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .clampScalar(0, s32, sXLen)
       .minScalarSameAs(1, 0);
 
-  if (ST.is64Bit()) {
-    getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT})
-        .legalFor({{sXLen, s32}})
-        .maxScalar(0, sXLen);
-
-    getActionDefinitionsBuilder(G_SEXT_INREG)
-        .customFor({sXLen})
-        .maxScalar(0, sXLen)
-        .lower();
-  } else {
-    getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT}).maxScalar(0, sXLen);
-
-    getActionDefinitionsBuilder(G_SEXT_INREG).maxScalar(0, sXLen).lower();
-  }
 
   // Merge/Unmerge
   for (unsigned Op : {G_MERGE_VALUES, G_UNMERGE_VALUES}) {
@@ -192,14 +184,10 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
 
   getActionDefinitionsBuilder({G_CONSTANT, G_IMPLICIT_DEF})
       .legalFor({s32, sXLen, p0})
+      .legalFor({v4s8, v2s16})
+      .legalFor({v2s8})
       .widenScalarToNextPow2(0)
       .clampScalar(0, s32, sXLen);
-
-  getActionDefinitionsBuilder(G_ICMP)
-      .legalFor({{sXLen, sXLen}, {sXLen, p0}})
-      .widenScalarToNextPow2(1)
-      .clampScalar(1, sXLen, sXLen)
-      .clampScalar(0, sXLen, sXLen);
 
   auto &SelectActions = getActionDefinitionsBuilder(G_SELECT).legalFor(
       {{s32, sXLen}, {p0, sXLen}});

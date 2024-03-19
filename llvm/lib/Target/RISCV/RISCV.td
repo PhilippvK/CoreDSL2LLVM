@@ -74,3 +74,6 @@ def RISCV : Target {
   let AssemblyWriters = [RISCVAsmWriter];
   let AllowRegisterRenaming = 1;
 }
+
+// RISCV.td - riscv_td_includes - INSERTION_START
+// RISCV.td - riscv_td_includes - INSERTION_END
