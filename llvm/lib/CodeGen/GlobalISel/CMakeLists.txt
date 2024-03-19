@@ -25,7 +25,6 @@ add_llvm_component_library(LLVMGlobalISel
   MachineIRBuilder.cpp
   RegBankSelect.cpp
   Utils.cpp
-  PatternGen.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/CodeGen/GlobalISel

@@ -314,7 +314,6 @@ void initializeWasmEHPreparePass(PassRegistry&);
 void initializeWinEHPreparePass(PassRegistry&);
 void initializeWriteBitcodePassPass(PassRegistry&);
 void initializeXRayInstrumentationPass(PassRegistry&);
-void initializePatternGenPass(PassRegistry&);
 
 } // end namespace llvm
 
