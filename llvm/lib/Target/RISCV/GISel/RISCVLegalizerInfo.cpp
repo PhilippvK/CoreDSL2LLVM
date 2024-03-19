@@ -244,7 +244,9 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .bitcastIf(LegalityPredicates::typeIs(1, s32), LegalizeMutations::changeTo(1, v4s8))
       .bitcastIf(LegalityPredicates::typeIs(0, v2s16), LegalizeMutations::changeTo(0, LLT::scalar(32)))
       .bitcastIf(LegalityPredicates::typeIs(1, v2s16), LegalizeMutations::changeTo(1, LLT::scalar(32)))
-      .bitcastIf(LegalityPredicates::typeIs(0, s32), LegalizeMutations::changeTo(0, v2s16));
+      .bitcastIf(LegalityPredicates::typeIs(0, s32), LegalizeMutations::changeTo(0, v2s16))
+      .bitcastIf(LegalityPredicates::typeIs(0, v2s8), LegalizeMutations::changeTo(0, LLT::scalar(16)))
+      .bitcastIf(LegalityPredicates::typeIs(1, v2s8), LegalizeMutations::changeTo(1, LLT::scalar(16)));
       // .bitcastIf(LegalityPredicates::typeIs(0, v4s8), LegalizeMutations::changeTo(0, p0))
       // .bitcastIf(LegalityPredicates::typeIs(1, v4s8), LegalizeMutations::changeTo(1, p0))
       // .bitcastIf(LegalityPredicates::typeIs(0, p0), LegalizeMutations::changeTo(0, v4s8))
@@ -264,6 +266,10 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
                                          LegalityPredicates::typeIs(1, v2s16)))
         .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s32),
                                          LegalityPredicates::typeIs(0, v2s16)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, s16),
+                                         LegalityPredicates::typeIs(1, v2s8)))
+        .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, s16),
+                                         LegalityPredicates::typeIs(0, v2s8)))
         .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(0, p0),
                                          LegalityPredicates::typeIs(1, v4s8)))
         .legalIf(LegalityPredicates::all(LegalityPredicates::typeIs(1, p0),
