@@ -640,13 +640,6 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
 
   setBooleanContents(ZeroOrOneBooleanContent);
 
-// RISCVISelLowering.cpp - legal_ops - INSERTION_START
-// RISCVISelLowering.cpp - legal_ops - INSERTION_END
-
-  if (Subtarget.hasGPR32V()) {
-    setBooleanVectorContents(ZeroOrNegativeOneBooleanContent);
-    // setBooleanVectorContents(ZeroOrOneBooleanContent);
-  }
   if (Subtarget.hasVInstructions()) {
     setBooleanVectorContents(ZeroOrOneBooleanContent);
 

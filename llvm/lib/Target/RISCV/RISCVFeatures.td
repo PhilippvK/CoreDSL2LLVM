@@ -771,15 +771,6 @@ def HasStdExtSvinval : Predicate<"Subtarget->hasStdExtSvinval()">,
                        AssemblerPredicate<(all_of FeatureStdExtSvinval),
                            "'Svinval' (Fine-Grained Address-Translation Cache Invalidation)">;
 
-def FeatureGPR32V : SubtargetFeature<"gpr32v", "HasGPR32V", "true", "TODO">;
-def HasGPR32V
-   : Predicate<"Subtarget->hasGPR32V)">,
-     AssemblerPredicate<(any_of FeatureGPR32V),
-                        "'GPR32V' (TODO)">;
-
-// RISCVFeatures.td - riscv_features - INSERTION_START
-// RISCVFeatures.td - riscv_features - INSERTION_END
-
 def FeatureStdExtSvnapot
     : SubtargetFeature<"svnapot", "HasStdExtSvnapot", "true",
                        "'Svnapot' (NAPOT Translation Contiguity)">;
