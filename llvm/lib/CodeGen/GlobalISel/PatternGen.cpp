@@ -1014,11 +1014,10 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   auto &OutStream = *PatternGenArgs::OutStream;
   auto &ExtName = PatternGenArgs::Args.ExtName;
 
-  OutStream << "let ";
   if (!PatternGenArgs::Args.Predicates.empty()) {
-    OutStream << "Predicates = [" << PatternGenArgs::Args.Predicates << "], ";
+    OutStream << "let Predicates = [" << PatternGenArgs::Args.Predicates << "] in {\n";
   }
-  OutStream << "hasSideEffects = 0, mayLoad = 0, mayStore = 0, "
+  OutStream << "let hasSideEffects = 0, mayLoad = 0, mayStore = 0, "
                "isCodeGenOnly = 1";
 
   OutStream << ", Constraints = \"";
@@ -1045,6 +1044,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   Code += InsString;
   Code += ")>;";
   OutStream << "\n" << Code << "\n\n";
+  if (!PatternGenArgs::Args.Predicates.empty()) {
+    OutStream << "}\n";
+  }
 
   // Delete all instructions to avoid match failures if patterns are not
   // included
