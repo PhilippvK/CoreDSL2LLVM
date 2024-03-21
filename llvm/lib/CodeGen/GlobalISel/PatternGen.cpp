@@ -25,6 +25,7 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
@@ -545,27 +546,15 @@ struct RegisterNode : public PatternNode {
           Type.getElementType().isScalar() &&
           Type.getElementType().getSizeInBits() == 16)
         return "PulpV2:$" + std::string(Name);
-
       abort();
     }
 
     // Sub-Register Operands
     if (Size == 16 || Size == 8) {
-      std::string Str;
-      if (Type.isScalar() && Type.getSizeInBits() == 32) {
-        assert(Offset == 0);
-        Str = "GPR:$" + std::string(Name);
-      } else
-        Str = std::string("(i32 (vector_extract PulpV") +
+      std::string Str = std::string("(i32 (vector_extract PulpV") +
               ((Size == 16) ? "2" : "4") + ":$" + std::string(Name) + ", " +
               std::to_string((Size == 16) ? (Offset / 2) : (Offset)) + "))";
-
-      std::string Mask = (Size == 16) ? "65535" : "255";
-      std::string Shamt = (Size == 16) ? "16" : "24";
-      if (Sext)
-        return "(sra (shl " + Str + ", (i32 " + Shamt + ")), (i32 " + Shamt +
-               "))";
-      return "(and " + Str + ", (i32 " + Mask + "))";
+      return Str;
     }
     abort();
   }
@@ -833,18 +822,33 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     return std::make_pair(SUCCESS, std::move(Node));
   }
   case TargetOpcode::G_LOAD: {
+
+    int ReadOffset = 0;
+    int ReadSize;
+
+    MachineMemOperand* MMO = *Cur.memoperands_begin();
+    ReadSize = MMO->getSizeInBits();
+
     assert(Cur.getOperand(1).isReg() && "expected register");
     auto *Addr = MRI.getOneDef(Cur.getOperand(1).getReg());
     if (!Addr)
       return std::make_pair(PatternError(FORMAT_LOAD, &Cur), nullptr);
     auto *AddrI = Addr->getParent();
-    if (AddrI->getOpcode() != TargetOpcode::COPY) {
-      if (AddrI->getOpcode() == TargetOpcode::G_PTR_ADD) {
-          // TargetOpcode::G_ADD, "add"},
-          // transform to: trunc (reg >> (offset * width))
-      }
-      return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
+
+    if (AddrI->getOpcode() == TargetOpcode::G_PTR_ADD) {
+      assert(AddrI->getOperand(1).isReg());
+      auto *BaseAddr =
+          MRI.getOneDef(AddrI->getOperand(1).getReg())->getParent();
+      auto *Offset = MRI.getOneDef(AddrI->getOperand(2).getReg())->getParent();
+      AddrI = BaseAddr;
+
+      if (Offset->getOpcode() != TargetOpcode::G_CONSTANT)
+        return std::make_pair(PatternError(FORMAT_LOAD, Offset), nullptr);
+
+      ReadOffset = Offset->getOperand(1).getCImm()->getLimitedValue();
     }
+    if (AddrI->getOpcode() != TargetOpcode::COPY)
+      return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
 
     assert(Cur.getOperand(1).isReg() && "expected register");
     auto AddrLI = AddrI->getOperand(1).getReg();
@@ -860,9 +864,9 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     PatternArgs[Idx].In = true;
 
     assert(Cur.getOperand(0).isReg() && "expected register");
-    auto Node =
-        std::make_unique<RegisterNode>(MRI.getType(Cur.getOperand(0).getReg()),
-                                       Field->ident, Idx, false, 0, 32, false);
+    auto Node = std::make_unique<RegisterNode>(
+        MRI.getType(Cur.getOperand(0).getReg()), Field->ident, Idx, false,
+        ReadOffset, ReadSize, false);
 
     return std::make_pair(SUCCESS, std::move(Node));
   }
@@ -937,6 +941,9 @@ generatePattern(MachineFunction &MF) {
     return std::make_pair(FORMAT_STORE, nullptr);
 
   auto &Store = *Instrs;
+  MachineMemOperand* MMO = *Store.memoperands_begin();
+  if (MMO->getSizeInBits() != 32)
+    return std::make_pair(FORMAT_STORE, nullptr);
 
   auto *Addr = MRI.getOneDef(Store.getOperand(1).getReg());
   if (Addr == nullptr || (Addr = MRI.getOneDef(Addr->getReg())) == nullptr ||
