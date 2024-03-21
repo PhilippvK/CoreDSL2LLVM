@@ -164,9 +164,9 @@ std::string lltToRegTypeStr(LLT Type) {
     if (Type.isFixedVector() && Type.getElementType().isScalar() &&
         Type.getSizeInBits() == 32) {
       if (Type.getElementType().getSizeInBits() == 8)
-        return "PulpV4";
+        return "GPR32V4";
       if (Type.getElementType().getSizeInBits() == 16)
-        return "PulpV2";
+        return "GPR32V2";
       abort();
     } else
       return "GPR";
@@ -544,11 +544,11 @@ struct RegisterNode : public PatternNode {
       if (Type.isFixedVector() && Type.getSizeInBits() == 32 &&
           Type.getElementType().isScalar() &&
           Type.getElementType().getSizeInBits() == 8)
-        return "PulpV4:$" + std::string(Name);
+        return "GPR32V4:$" + std::string(Name);
       if (Type.isFixedVector() && Type.getSizeInBits() == 32 &&
           Type.getElementType().isScalar() &&
           Type.getElementType().getSizeInBits() == 16)
-        return "PulpV2:$" + std::string(Name);
+        return "GPR32V2:$" + std::string(Name);
       abort();
     }
 
@@ -556,7 +556,7 @@ struct RegisterNode : public PatternNode {
     if (Size == 16 || Size == 8) {
       std::string Str;
       if (VectorExtract) {
-        Str = std::string("(i32 (vector_extract PulpV") +
+        Str = std::string("(i32 (vector_extract GPR32V") +
               ((Size == 16) ? "2" : "4") + ":$" + std::string(Name) + ", " +
               std::to_string((Size == 16) ? (Offset / 2) : (Offset)) + "))";
       } else {
