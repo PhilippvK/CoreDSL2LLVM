@@ -68,6 +68,7 @@ PGArgsStruct PatternGenArgs::Args;
 
 struct PatternArg {
   std::string ArgTypeStr;
+  LLT LLT;
   // We also have in and out bits in the CDSLInstr struct itself.
   // These bits are currently ignored though. Instead, we find inputs
   // and outputs during pattern gen and store that in these fields.
@@ -517,7 +518,8 @@ struct RegisterNode : public PatternNode {
   int Offset;
   int Size;
   bool Sext;
-  bool VectorExtract = false; // TODO: set based on type of this register in other uses
+  bool VectorExtract =
+      false; // TODO: set based on type of this register in other uses
 
   size_t RegIdx;
 
@@ -561,7 +563,8 @@ struct RegisterNode : public PatternNode {
         if (Offset == 0)
           Str = "GPR:$" + std::string(Name);
         else
-          Str = "(i32 (srl GPR:$" + std::string(Name) + " (i32 " + std::to_string(Offset * 8) + ")))"; 
+          Str = "(i32 (srl GPR:$" + std::string(Name) + " (i32 " +
+                std::to_string(Offset * 8) + ")))";
       }
       return Str;
     }
@@ -868,8 +871,8 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     if (Field == nullptr)
       return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
 
-    PatternArgs[Idx].ArgTypeStr =
-        lltToRegTypeStr(MRI.getType(Cur.getOperand(0).getReg()));
+    PatternArgs[Idx].LLT = MRI.getType(Cur.getOperand(0).getReg());
+    PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].LLT);
     PatternArgs[Idx].In = true;
 
     assert(Cur.getOperand(0).isReg() && "expected register");
@@ -911,8 +914,8 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     auto [Idx, Field] = getArgInfo(MRI, Reg);
 
     PatternArgs[Idx].In = true;
-    PatternArgs[Idx].ArgTypeStr =
-        makeImmTypeStr(Field->len, Field->type & CDSLInstr::SIGNED);
+    PatternArgs[Idx].LLT = LLT();
+    PatternArgs[Idx].ArgTypeStr = makeImmTypeStr(Field->len, Field->type & CDSLInstr::SIGNED);
 
     if (Field == nullptr)
       return std::make_pair(FORMAT_IMM, nullptr);
@@ -973,6 +976,7 @@ generatePattern(MachineFunction &MF) {
       Type = MRI.getType(Root->getOperand(1).getReg());
     else
       Type = MRI.getType(Root->getOperand(0).getReg());
+    PatternArgs[Idx].LLT = Type;
     PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(Type);
   }
 
@@ -1011,6 +1015,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   llvm::outs() << "Pattern for " << InstName << ": " << Node->patternString()
                << '\n';
 
+  LLT OutType;
   std::string OutsString;
   std::string InsString;
   for (size_t I = 0; I < CurInstr->fields.size() - 1; I++) {
@@ -1023,6 +1028,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
       OutsString += PatternArgs[I].ArgTypeStr + ":$" +
                     std::string(CurInstr->fields[I].ident) +
                     (IO ? "_wb, " : ", ");
+
+      assert(!OutType.isValid());
+      OutType = PatternArgs[I].LLT;
     }
   }
 
@@ -1055,9 +1063,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
             << OutsString << "), (ins " << InsString << ")>;\n";
 
   std::string PatternStr = Node->patternString();
-  // TODO: fix for real?
-  // std::string Code = "def : Pat<\n\t" + PatternStr + ",\n\t(" + InstName + " ";
-  std::string Code = "def : Pat<\n\t(i32 " + PatternStr + "),\n\t(" + InstName + "_ ";
+  std::string Code = "def : Pat<\n\t(";
+
+  Code += lltToString(OutType) + " " + PatternStr + "),\n\t(" + InstName + "_ ";
 
   Code += InsString;
   Code += ")>;";
