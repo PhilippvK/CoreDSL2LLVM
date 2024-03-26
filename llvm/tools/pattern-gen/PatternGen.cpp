@@ -31,7 +31,7 @@ int OptimizeBehavior(llvm::Module *M, std::vector<CDSLInstr> const &instrs,
   // by the LLVM pipeline. We thus "pass" arguments as globals.
   // llvm::PatternGenArgs::ExtName = &extName;
 
-  int rv = RunOptPipeline(M, args.Mattr, args.OptLevel, ostreamIR);
+  int rv = RunOptPipeline(M, args.is64Bit, args.Mattr, args.OptLevel, ostreamIR);
 
   // llvm::PatternGenArgs::ExtName = nullptr;
 
@@ -46,7 +46,7 @@ int GeneratePatterns(llvm::Module *M, std::vector<CDSLInstr> const &instrs,
   llvm::PatternGenArgs::Args = args;
   llvm::PatternGenArgs::Instrs = &instrs;
 
-  int rv = RunPatternGenPipeline(M, args.Mattr);
+  int rv = RunPatternGenPipeline(M, args.is64Bit, args.Mattr);
 
   llvm::PatternGenArgs::OutStream = nullptr;
   llvm::PatternGenArgs::Args = PGArgsStruct();

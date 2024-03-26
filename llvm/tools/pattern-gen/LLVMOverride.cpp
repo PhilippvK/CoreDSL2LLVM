@@ -408,8 +408,8 @@ static void set_options()
 }
 
 // Adapted from LLVM llc
-int RunOptPipeline(llvm::Module *M, std::string mattr,
-                          llvm::CodeGenOptLevel optLevel, std::ostream &irOut) {
+int RunOptPipeline(llvm::Module *M, bool is64Bit, std::string mattr,
+                   llvm::CodeGenOptLevel optLevel, std::ostream &irOut) {
   set_options();
 
   InitializeAllTargets();
@@ -436,7 +436,7 @@ int RunOptPipeline(llvm::Module *M, std::string mattr,
 
   // Load the module to be compiled...
   // SMDiagnostic Err;
-  Triple TheTriple("riscv32", "unknown", "linux", "gnu");
+  Triple TheTriple((is64Bit ? "riscv64" : "riscv32"), "unknown", "linux", "gnu");
   codegen::InitTargetOptionsFromCodeGenFlags(TheTriple);
   std::string CPUStr = codegen::getCPUStr(),
               FeaturesStr = codegen::getFeaturesStr() + mattr;
@@ -447,7 +447,7 @@ int RunOptPipeline(llvm::Module *M, std::string mattr,
   std::optional<Reloc::Model> RM = codegen::getExplicitRelocModel();
   std::optional<CodeModel::Model> CM = codegen::getExplicitCodeModel();
 
-  M->setTargetTriple("riscv32-unknown-linux-gnu");
+  M->setTargetTriple(is64Bit ? "riscv64-unknown-linux-gnu" : "riscv32-unknown-linux-gnu");
 
   std::string error;
   const class Target *TheTarget =
@@ -478,13 +478,13 @@ int RunOptPipeline(llvm::Module *M, std::string mattr,
 }
 
 // Adapted from LLVM llc
-int RunPatternGenPipeline(llvm::Module *M, std::string mattr) {
+int RunPatternGenPipeline(llvm::Module *M, bool is64Bit, std::string mattr) {
   set_options();
 
 
   // Load the module to be compiled...
   // SMDiagnostic Err;
-  Triple TheTriple("riscv32", "unknown", "linux", "gnu");
+  Triple TheTriple((is64Bit ? "riscv64" : "riscv32"), "unknown", "linux", "gnu");
   codegen::InitTargetOptionsFromCodeGenFlags(TheTriple);
   std::string CPUStr = codegen::getCPUStr(),
               FeaturesStr = codegen::getFeaturesStr() + mattr;
@@ -495,7 +495,7 @@ int RunPatternGenPipeline(llvm::Module *M, std::string mattr) {
   std::optional<Reloc::Model> RM = codegen::getExplicitRelocModel();
   std::optional<CodeModel::Model> CM = codegen::getExplicitCodeModel();
 
-  M->setTargetTriple("riscv32-unknown-linux-gnu");
+  M->setTargetTriple(is64Bit ? "riscv64-unknown-linux-gnu" : "riscv32-unknown-linux-gnu");
 
   std::string error;
   const class Target *TheTarget =
