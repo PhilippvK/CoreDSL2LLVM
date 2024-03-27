@@ -563,7 +563,7 @@ struct RegisterNode : public PatternNode {
         if (Offset == 0)
           Str = "GPR:$" + std::string(Name);
         else
-          Str = "(i32 (srl GPR:$" + std::string(Name) + " (i32 " +
+          Str = "(i32 (srl GPR:$" + std::string(Name) + ", (i32 " +
                 std::to_string(Offset * 8) + ")))";
       }
       return Str;
