@@ -576,6 +576,7 @@ struct RegisterNode : public PatternNode {
           // Str = "(i32 (srl GPR:$" + std::string(Name) + ", (i32 " +
           //       std::to_string(Offset * 8) + ")))";
           Str = ("(" + RegT + " ") + "(srl GPR:$" + std::string(Name) +
+                (" (" + RegT + " ") + std::to_string(Offset * 8) + ")))";
         }
       }
       return Str;
@@ -884,8 +885,8 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     if (Field == nullptr)
       return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
 
-    PatternArgs[Idx].LLT = MRI.getType(Cur.getOperand(0).getReg());
-    PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].LLT);
+    PatternArgs[Idx].Llt = MRI.getType(Cur.getOperand(0).getReg());
+    PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].Llt);
     PatternArgs[Idx].In = true;
 
     assert(Cur.getOperand(0).isReg() && "expected register");
@@ -927,7 +928,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     auto [Idx, Field] = getArgInfo(MRI, Reg);
 
     PatternArgs[Idx].In = true;
-    PatternArgs[Idx].LLT = LLT();
+    PatternArgs[Idx].Llt = LLT();
     PatternArgs[Idx].ArgTypeStr =
         makeImmTypeStr(Field->len, Field->type & CDSLInstr::SIGNED);
 
