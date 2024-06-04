@@ -25,6 +25,7 @@ add_llvm_component_library(LLVMGlobalISel
   RegBankSelect.cpp
   Utils.cpp
   # CMakeLists.txt - gisel_cmake_srcs - INSERTION_START
+  PatternGen.cpp
   # CMakeLists.txt - gisel_cmake_srcs - INSERTION_END
 
   ADDITIONAL_HEADER_DIRS
