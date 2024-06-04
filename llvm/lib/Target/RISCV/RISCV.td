@@ -76,4 +76,7 @@ def RISCV : Target {
 }
 
 // RISCV.td - riscv_td_includes - INSERTION_START
+
+include "seal5.td"
+
 // RISCV.td - riscv_td_includes - INSERTION_END
