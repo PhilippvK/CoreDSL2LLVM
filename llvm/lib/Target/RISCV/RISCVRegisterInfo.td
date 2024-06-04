@@ -605,5 +605,8 @@ foreach m = LMULList in {
 def FFLAGS : RISCVReg<0, "fflags">;
 def FRM    : RISCVReg<0, "frm">;
 
+// RISCVRegisterInfo.td - riscv_register_info - INSERTION_START
+// RISCVRegisterInfo.td - riscv_register_info - INSERTION_END
+
 // Shadow Stack register
 def SSP    : RISCVReg<0, "ssp">;

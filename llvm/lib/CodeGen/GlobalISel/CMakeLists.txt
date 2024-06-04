@@ -24,6 +24,8 @@ add_llvm_component_library(LLVMGlobalISel
   MachineIRBuilder.cpp
   RegBankSelect.cpp
   Utils.cpp
+  # CMakeLists.txt - gisel_cmake_srcs - INSERTION_START
+  # CMakeLists.txt - gisel_cmake_srcs - INSERTION_END
 
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/CodeGen/GlobalISel

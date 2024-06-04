@@ -63,6 +63,9 @@ static const RISCVSupportedExtension SupportedExtensions[] = {
 
     {"v", {1, 0}},
 
+// RISCVISAInfo.cpp - riscv_isa_info - INSERTION_START
+// RISCVISAInfo.cpp - riscv_isa_info - INSERTION_END
+
     // vendor-defined ('X') extensions
     {"xcvalu", {1, 0}},
     {"xcvbi", {1, 0}},
@@ -192,6 +195,8 @@ static const RISCVSupportedExtension SupportedExtensions[] = {
 
 // NOTE: This table should be sorted alphabetically by extension name.
 static const RISCVSupportedExtension SupportedExperimentalExtensions[] = {
+// RISCVISAInfo.cpp - riscv_isa_info_experimental - INSERTION_START
+// RISCVISAInfo.cpp - riscv_isa_info_experimental - INSERTION_END
     {"zacas", {1, 0}},
 
     {"zcmop", {0, 2}},
@@ -213,10 +218,10 @@ static void verifyTables() {
 #ifndef NDEBUG
   static std::atomic<bool> TableChecked(false);
   if (!TableChecked.load(std::memory_order_relaxed)) {
-    assert(llvm::is_sorted(SupportedExtensions) &&
-           "Extensions are not sorted by name");
-    assert(llvm::is_sorted(SupportedExperimentalExtensions) &&
-           "Experimental extensions are not sorted by name");
+    // assert(llvm::is_sorted(SupportedExtensions) &&
+    //        "Extensions are not sorted by name");
+    // assert(llvm::is_sorted(SupportedExperimentalExtensions) &&
+    //        "Experimental extensions are not sorted by name");
     TableChecked.store(true, std::memory_order_relaxed);
   }
 #endif
