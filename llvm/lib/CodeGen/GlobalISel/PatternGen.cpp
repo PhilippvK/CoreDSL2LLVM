@@ -576,7 +576,7 @@ struct RegisterNode : public PatternNode {
           // Str = "(i32 (srl GPR:$" + std::string(Name) + ", (i32 " +
           //       std::to_string(Offset * 8) + ")))";
           Str = ("(" + RegT + " ") + "(srl GPR:$" + std::string(Name) +
-                (" (" + RegT + " ") + std::to_string(Offset * 8) + ")))";
+                (", (" + RegT + " ") + std::to_string(Offset * 8) + ")))";
         }
       }
       return Str;
