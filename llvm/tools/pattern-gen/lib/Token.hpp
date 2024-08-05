@@ -71,9 +71,12 @@ enum TokenType
     AssemblyKeyword,
     BehaviorKeyword,
     ExtendsKeyword,
+    FunctionsKeyword,
     InstructionsKeyword,
     SignedKeyword,
     UnsignedKeyword,
+    ExternKeyword,
+    VoidKeyword,
 
     TOK_KW_END = UnsignedKeyword,
 
@@ -141,4 +144,3 @@ struct Token
     }
 
 };
-

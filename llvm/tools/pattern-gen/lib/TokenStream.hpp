@@ -24,9 +24,12 @@ struct TokenStream
         std::make_pair("assembly", 6),
         std::make_pair("behavior", 7),
         std::make_pair("extends", 8),
-        std::make_pair("instructions", 9),
-        std::make_pair("signed", 10),
-        std::make_pair("unsigned", 11),
+        std::make_pair("functions", 9),
+        std::make_pair("instructions", 10),
+        std::make_pair("signed", 11),
+        std::make_pair("unsigned", 12),
+        std::make_pair("extern", 13),
+        std::make_pair("void", 14),
     };
     const size_t NUM_KEYWORDS = strings.size();
 
@@ -35,4 +38,3 @@ struct TokenStream
     Token Pop();
     Token Peek();
 };
-
