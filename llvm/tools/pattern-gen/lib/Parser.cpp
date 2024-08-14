@@ -450,8 +450,10 @@ Value gen_binop(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build,
         case Op::Add:
             switch (signedPair)
             {
-                case 0b00: resultWidth = std::max(w1, w2) + 1; break;
-                case 0b11: resultWidth = std::max(w1, w2) + 1; break;
+                // case 0b00: resultWidth = std::max(w1, w2) + 1; break;
+                // case 0b11: resultWidth = std::max(w1, w2) + 1; break;
+                case 0b00: resultWidth = std::max(w1, w2); break;
+                case 0b11: resultWidth = std::max(w1, w2); break;
                 case 0b10: resultWidth = std::max(w1, w2 + 1) + 1; break;
                 case 0b01: resultWidth = std::max(w1 + 1, w2) + 1; break;
             }
@@ -465,7 +467,8 @@ Value gen_binop(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build,
                 case 0b01: resultWidth = std::max(w1 + 1, w2) + 1; break;
             }
             break;
-        case Op::Mul: resultWidth = w1 + w2; break;
+        // case Op::Mul: resultWidth = w1 + w2; break;
+        case Op::Mul: resultWidth = std::max(w1, w2); break;
         case Op::SDiv: resultWidth = w1 + right.isSigned; break;
         case Op::SRem:
             switch (signedPair)
