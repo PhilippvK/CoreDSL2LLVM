@@ -20,6 +20,7 @@
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/AllocatorBase.h"
 #include "llvm/Support/TypeSize.h"
+#include "llvm/ADT/Statistic.h"
 #include <array>
 #include <cstdlib>
 #include <functional>
@@ -29,6 +30,15 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+
+#define DEBUG_TYPE "pattern-gen"
+
+STATISTIC(
+    PatternGenNumSetsParsed,
+    "Parsed instruction sets");
+STATISTIC(
+    PatternGenNumInstructionsParsed,
+    "Parsed instructions");
 
 using namespace std::placeholders;
 
@@ -165,7 +175,7 @@ void promote_lvalue(llvm::IRBuilder<>& build, Value& v)
 {
     if (!v.isLValue)
         return;
-    
+
     v.ll = build.CreateAlignedLoad(llvm::Type::getIntNTy(build.getContext(), v.bitWidth), v.ll,
         llvm::Align(ceil_to_pow2(v.bitWidth) / 8), v.ll->getName() + ".v");
     v.isLValue = false;
@@ -708,7 +718,7 @@ Value ParseExpressionTerminal(TokenStream& ts, llvm::Function* func, llvm::IRBui
             // rd is true to skip "if (rd != 0)" checks.
             if (t.ident.str == "rd")
                 return {llvm::ConstantInt::get(regT, 1)};
-            
+
             auto *memIt = llvm::find(memTypes, t.ident.str);
             if (memIt != memTypes.end())
             {
@@ -1264,7 +1274,7 @@ void ParseBehaviour (TokenStream& ts, CDSLInstr& instr, llvm::Module* mod, Token
             assert(&field == &curInstr->fields.back());
             break;
         }
-        
+
         llvm::Type* argT = ptrT;
         int argBitLen = -1;
 
@@ -1277,11 +1287,11 @@ void ParseBehaviour (TokenStream& ts, CDSLInstr& instr, llvm::Module* mod, Token
             error(("field " + std::string(field.ident) + " of " + instr.name +
                    " is both immediate and register ID")
                       .c_str(), ts);
-        
+
         argTypes.push_back(argT);
         argNames.push_back(field.ident);
         argBitLens.push_back(argBitLen);
-        
+
     }
 
     auto fType = llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), argTypes, false);
@@ -1295,7 +1305,7 @@ void ParseBehaviour (TokenStream& ts, CDSLInstr& instr, llvm::Module* mod, Token
 
     for (size_t i = 0; i < argNames.size(); i++)
         func->getArg(i)->setName(argNames[i]);
-    
+
     // For vectorization to work, we must assume that
     // the destination does not overlap with sources.
     // For simulators using this generated code, this means
@@ -1314,7 +1324,7 @@ void ParseBehaviour (TokenStream& ts, CDSLInstr& instr, llvm::Module* mod, Token
         {
             auto *arg = func->getArg(i);
             auto *maskC = llvm::ConstantInt::get(arg->getType(), (1ULL << argBitLens[i]) - 1);
-            
+
             auto *cond = build.CreateICmpEQ(arg, build.CreateAnd(arg, maskC));
             build.CreateIntrinsic(llvm::Type::getVoidTy(ctx), llvm::Intrinsic::assume, {cond});
         }
@@ -1334,6 +1344,7 @@ std::vector<CDSLInstr> ParseCoreDSL2(TokenStream& ts, bool is64Bit, llvm::Module
         bool parseBoilerplate = ts.Peek().type == Identifier && ts.Peek().ident.str == "InstructionSet";
         if (parseBoilerplate)
         {
+            ++PatternGenNumSetsParsed;
             pop_cur(ts, Identifier);
             pop_cur(ts, Identifier);
             if (pop_cur_if(ts, ExtendsKeyword))
@@ -1346,6 +1357,7 @@ std::vector<CDSLInstr> ParseCoreDSL2(TokenStream& ts, bool is64Bit, llvm::Module
         while (ts.Peek().type != CBrClose && ts.Peek().type != None)
         {
             reset_globals();
+            ++PatternGenNumInstructionsParsed;
             Token ident = pop_cur(ts, Identifier);
             pop_cur(ts, CBrOpen);
             CDSLInstr instr{.name = std::string(ident.ident.str)};
