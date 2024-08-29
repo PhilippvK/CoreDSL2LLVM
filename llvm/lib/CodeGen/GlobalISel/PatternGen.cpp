@@ -578,7 +578,7 @@ struct BinopNode : public PatternNode {
 
   BinopNode(LLT Type, int Op, std::unique_ptr<PatternNode> Left,
             std::unique_ptr<PatternNode> Right)
-      : PatternNode(PN_Binop, Type), Op(Op), Left(std::move(Left)),
+      : PatternNode(PN_Binop, Type, false), Op(Op), Left(std::move(Left)),
         Right(std::move(Right)) {}
 
   std::string patternString(int Indent = 0) override {
@@ -801,7 +801,7 @@ struct RegisterNode : public PatternNode {
 
   RegisterNode(LLT Type, StringRef Name, size_t RegIdx, bool IsImm, int Offset,
                int Size, bool Sext)
-      : PatternNode(PN_Register, Type), IsImm(IsImm), Name(Name),
+      : PatternNode(PN_Register, Type, IsImm), Name(Name),
         Offset(Offset), Size(Size), Sext(Sext), RegIdx(RegIdx) {}
 
   std::string patternString(int Indent = 0) override {
