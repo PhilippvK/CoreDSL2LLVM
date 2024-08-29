@@ -432,7 +432,8 @@ private:
 public:
   PatternNodeKind getKind() const { return kind; }
   LLT Type;
-  PatternNode(PatternNodeKind Kind, LLT Type) : kind(Kind), Type(Type) {}
+  bool IsImm = false;
+  PatternNode(PatternNodeKind Kind, LLT Type, bool IsImm) : kind(Kind), Type(Type), IsImm(IsImm) {}
 
   virtual std::string patternString(int Indent = 0) = 0;
   virtual LLT getRegisterTy(int OperandId) const {
@@ -447,7 +448,7 @@ struct NOpNode : public PatternNode {
   int Op;
   std::vector<std::unique_ptr<PatternNode>> Operands;
   NOpNode(LLT Type, int Op, std::vector<std::unique_ptr<PatternNode>> Operands)
-      : PatternNode(PN_NOp, Type), Op(Op), Operands(std::move(Operands)) {}
+      : PatternNode(PN_NOp, Type, false), Op(Op), Operands(std::move(Operands)) {}
 
   std::string patternString(int Indent = 0) override {
     static const std::unordered_map<int, std::string> NOpStr = {
@@ -487,7 +488,7 @@ struct ShuffleNode : public PatternNode {
   ShuffleNode(LLT Type, int Op, std::unique_ptr<PatternNode> First,
             std::unique_ptr<PatternNode> Second, ArrayRef<int> Mask)
             // std::unique_ptr<PatternNode> Second, std::unique_ptr<ArrayRef<int>> Mask)
-      : PatternNode(PN_Shuffle, Type), Op(Op), First(std::move(First)),
+      : PatternNode(PN_Shuffle, Type, false), Op(Op), First(std::move(First)),
         Second(std::move(Second)), Mask(std::move(Mask)) {}
 
   std::string patternString(int Indent = 0) override {
@@ -532,7 +533,7 @@ struct TernopNode : public PatternNode {
 
   TernopNode(LLT Type, int Op, std::unique_ptr<PatternNode> First,
             std::unique_ptr<PatternNode> Second, std::unique_ptr<PatternNode> Third)
-      : PatternNode(PN_Ternop, Type), Op(Op), First(std::move(First)),
+      : PatternNode(PN_Ternop, Type, false), Op(Op), First(std::move(First)),
         Second(std::move(Second)), Third(std::move(Third)) {}
 
   std::string patternString(int Indent = 0) override {
@@ -620,10 +621,19 @@ struct BinopNode : public PatternNode {
         {TargetOpcode::G_ROTL, "rotl"},
         {TargetOpcode::G_EXTRACT_VECTOR_ELT, "vector_extract"}};
 
+    static const std::vector<double> CommOps = {TargetOpcode::G_ADD, TargetOpcode::G_MUL, TargetOpcode::G_UMULH, TargetOpcode::G_SMULH, TargetOpcode::G_AND, TargetOpcode::G_OR, TargetOpcode::G_XOR, TargetOpcode::G_UMAX, TargetOpcode::G_SMIN, TargetOpcode::G_UMIN}; // TODO: extend list
+    bool IsCommutable = std::find(CommOps.begin(), CommOps.end(), Op) != CommOps.end();
+    // RegisterNode* LeftReg = static_cast<RegisterNode*>(Left.get());
+    // RegisterNode* RightReg = static_cast<RegisterNode*>(Right.get());
+    // bool LeftImm = (LeftReg != 0) ? LeftReg->IsImm : false;
+    // bool RightImm = (RightReg != 0) ? RightReg->IsImm : false;
+    bool LeftImm = Left->IsImm;
+    bool RightImm = Right->IsImm;
+    bool DoSwap = IsCommutable && LeftImm && !RightImm;
     std::string TypeStr = lltToString(Type);
     std::string OpString = "(" + std::string(BinopStr.at(Op)) + " " +
-                           Left->patternString(Indent + 1) + ", " +
-                           Right->patternString(Indent + 1) + ")";
+                           (DoSwap ? Right : Left)->patternString(Indent + 1) + ", " +
+                           (DoSwap ? Left : Right)->patternString(Indent + 1) + ")";
 
     // Explicitly specifying types for all ops increases pattern compile time
     // significantly, so we only do for ops where deduction fails otherwise.
@@ -684,7 +694,7 @@ struct SelectNode : public PatternNode {
              std::unique_ptr<PatternNode> Right,
              std::unique_ptr<PatternNode> Tval,
              std::unique_ptr<PatternNode> Fval)
-      : PatternNode(PN_Select, Type), Cond(Cond), Left(std::move(Left)),
+      : PatternNode(PN_Select, Type, false), Cond(Cond), Left(std::move(Left)),
         Right(std::move(Right)), Tval(std::move(Tval)), Fval(std::move(Fval)) {}
 
   std::string patternString(int Indent = 0) override {
@@ -719,7 +729,7 @@ struct UnopNode : public PatternNode {
   std::unique_ptr<PatternNode> Operand;
 
   UnopNode(LLT Type, int Op, std::unique_ptr<PatternNode> Operand)
-      : PatternNode(PN_Unop, Type), Op(Op), Operand(std::move(Operand)) {}
+      : PatternNode(PN_Unop, Type, false), Op(Op), Operand(std::move(Operand)) {}
 
   std::string patternString(int Indent = 0) override {
     static const std::unordered_map<int, std::string> UnopStr = {
@@ -760,7 +770,7 @@ struct UnopNode : public PatternNode {
 struct ConstantNode : public PatternNode {
   uint32_t Constant;
   ConstantNode(LLT Type, uint32_t c)
-      : PatternNode(PN_Constant, Type), Constant(c) {}
+      : PatternNode(PN_Constant, Type, true), Constant(c) {}
 
   std::string patternString(int Indent = 0) override {
     if (Type.isFixedVector()) {
