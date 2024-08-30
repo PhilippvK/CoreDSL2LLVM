@@ -797,7 +797,6 @@ struct ConstantNode : public PatternNode {
 
 struct RegisterNode : public PatternNode {
 
-  bool IsImm;
   StringRef Name;
 
   int Offset;
