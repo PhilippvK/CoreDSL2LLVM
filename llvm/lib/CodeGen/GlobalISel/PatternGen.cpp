@@ -897,12 +897,12 @@ struct LoadNode : public PatternNode {
   std::unique_ptr<PatternNode> Addr;
 
   LoadNode(int Size, bool Sext, std::unique_ptr<PatternNode> Addr)
-      : PatternNode(PN_Load, LLT(, false)), Size(Size), Sext(Sext), Addr(std::move(Addr)) {}
+      : PatternNode(PN_Load, LLT(), false), Size(Size), Sext(Sext), Addr(std::move(Addr)) {}
 
   std::string patternString(int Indent = 0) override {
     if ((size_t)Size == XLen)
       return "(" + RegT + " (load " + Addr->patternString() + "))";
-    assert(Size < XLen && "load size > xlen");
+    assert((size_t)Size < XLen && "load size > xlen");
     assert(Size >= 8 && "load size < 8");
     assert(Size % 8 == 0 && "load size unaligned");
     // TODO: use AddrRegImm?
@@ -1086,8 +1086,8 @@ traverseRegLoad(MachineRegisterInfo &MRI, MachineInstr &Cur, int ReadSize,
   if (Field == nullptr)
     return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
 
-  PatternArgs[Idx].LLT = MRI.getType(Cur.getOperand(0).getReg());
-  PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].LLT);
+  PatternArgs[Idx].Llt = MRI.getType(Cur.getOperand(0).getReg());
+  PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].Llt);
   PatternArgs[Idx].In = true;
 
   assert(Cur.getOperand(0).isReg() && "expected register");
