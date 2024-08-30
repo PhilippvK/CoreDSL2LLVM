@@ -588,14 +588,23 @@ struct RegisterNode : public PatternNode {
 struct LoadNode : public PatternNode {
 
   int Size;
+  bool Sext;
   std::unique_ptr<PatternNode> Addr;
 
-  LoadNode(int Size, std::unique_ptr<PatternNode> Addr)
-      : PatternNode(PN_Load, LLT()), Size(Size), Addr(std::move(Addr)) {}
+  LoadNode(int Size, bool Sext, std::unique_ptr<PatternNode> Addr)
+      : PatternNode(PN_Load, LLT()), Size(Size), Sext(Sext), Addr(std::move(Addr)) {}
 
   std::string patternString(int Indent = 0) override {
     if ((size_t)Size == XLen)
       return "(" + RegT + " (load " + Addr->patternString() + "))";
+    assert(Size < XLen && "load size > xlen");
+    assert(Size >= 8 && "load size < 8");
+    assert(Size % 8 == 0 && "load size unaligned");
+    // TODO: use AddrRegImm?
+    // TODO: how about anyext?
+    if (Sext)
+      return "(" + RegT + " (sextloadi" + std::to_string(Size) + " " + Addr->patternString() + "))";
+    return "(" + RegT + " (zextloadi" + std::to_string(Size) + " " + Addr->patternString() + "))";
     abort();
   }
 
@@ -791,8 +800,10 @@ traverseMemLoad(MachineRegisterInfo &MRI, MachineInstr &Cur, int ReadSize,
   if (Err)
     return std::make_pair(Err, nullptr);
 
+  bool Sext = Cur.getOpcode() == TargetOpcode::G_SEXTLOAD;
+
   return std::make_pair(SUCCESS,
-                        std::make_unique<LoadNode>(ReadSize, std::move(Node)));
+                        std::make_unique<LoadNode>(ReadSize, Sext, std::move(Node)));
 }
 
 static std::pair<PatternError, std::unique_ptr<PatternNode>>
@@ -868,7 +879,9 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
 
     return std::make_pair(SUCCESS, std::move(Node));
   }
-  case TargetOpcode::G_LOAD: {
+  case TargetOpcode::G_LOAD:
+  case TargetOpcode::G_ZEXTLOAD:
+  case TargetOpcode::G_SEXTLOAD: {
 
     MachineMemOperand *MMO = *Cur.memoperands_begin();
     int ReadSize = MMO->getSizeInBits();
