@@ -593,7 +593,7 @@ struct BinopNode : public PatternNode {
         {TargetOpcode::G_UDIV, "udiv"},
         {TargetOpcode::G_SREM, "srem"},
         {TargetOpcode::G_UREM, "urem"},
-        {TargetOpcode::G_SDIV, "div"},
+        {TargetOpcode::G_SDIV, "sdiv"},
         {TargetOpcode::G_SADDSAT, "saddsat"},
         {TargetOpcode::G_UADDSAT, "uaddsat"},
         {TargetOpcode::G_SSUBSAT, "ssubsat"},
