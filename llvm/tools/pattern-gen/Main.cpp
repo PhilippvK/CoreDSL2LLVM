@@ -150,6 +150,7 @@ int main(int argc, char **argv) {
   }
 
   PGArgsStruct Args{.ExtName = ExtName,
+                    .Mattr = Mattr,  // Extra features to be added while compilation. Should
                     .OptLevel = Opt,
                     .Predicates = Predicates,
                     .is64Bit = (XLen == 64)};
