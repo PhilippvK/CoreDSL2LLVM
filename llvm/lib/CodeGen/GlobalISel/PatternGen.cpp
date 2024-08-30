@@ -804,7 +804,6 @@ struct ConstantNode : public PatternNode {
 
 struct RegisterNode : public PatternNode {
 
-  bool IsImm;
   StringRef Name;
 
   int Offset;
@@ -1150,6 +1149,10 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
         return std::make_pair(PatternError(FORMAT_LOAD, Offset), nullptr);
 
       ReadOffset = Offset->getOperand(1).getCImm()->getLimitedValue();
+    }
+    if (AddrI->getOpcode() == TargetOpcode::G_SELECT) {
+      // TODO: implement this!
+      return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
     }
     if (AddrI->getOpcode() != TargetOpcode::COPY)
       return std::make_pair(PatternError(FORMAT_LOAD, AddrI), nullptr);
