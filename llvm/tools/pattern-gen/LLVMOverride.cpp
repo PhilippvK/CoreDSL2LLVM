@@ -146,6 +146,7 @@ public:
   bool addPreISel() override;
   bool addInstSelector() override;
   bool addIRTranslator() override;
+  void addPreLegalizeMachineIR() override;
   bool addLegalizeMachineIR() override;
   bool addRegBankSelect() override;
   bool addGlobalInstructionSelect() override;
@@ -207,6 +208,13 @@ bool RISCVPatternPassConfig::addInstSelector() {
 bool RISCVPatternPassConfig::addIRTranslator() {
   addPass(new IRTranslator(getOptLevel()));
   return false;
+}
+
+void RISCVPatternPassConfig::addPreLegalizeMachineIR() {
+  if (getOptLevel() == CodeGenOptLevel::None) {
+    addPass(createRISCVO0PreLegalizerCombiner());
+  } else {                                                                                                             addPass(createRISCVPreLegalizerCombiner());
+  }
 }
 
 bool RISCVPatternPassConfig::addLegalizeMachineIR() {
