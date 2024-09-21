@@ -24,6 +24,7 @@
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/ADT/Statistic.h"
 
 using namespace llvm;
 
@@ -52,11 +53,15 @@ static cl::opt<bool> SkipVerify("skip-verify", cl::desc("Skip verification step.
                           cl::cat(ToolOptions));
 static cl::opt<bool> PrintIR("print-ir", cl::desc("Print LLVM-IR module."),
                           cl::cat(ToolOptions));
-static cl::opt<std::string>
-    Mattr("mattr2", cl::desc("Target specific attributes"),
-          cl::value_desc("a1,+a2,-a3,..."), cl::cat(ToolOptions),
-          // cl::init("+m,+fast-unaligned-access,+xcvalu,+xcvsimd"));
-          cl::init("+m,+fast-unaligned-access"));
+// static cl::opt<std::string> ExtName("ext", cl::desc("Target extension"),
+//                                     cl::cat(ToolOptions), cl::init("ExtXcvsimd"));
+static cl::opt<bool> NoExtend("no-extend", cl::desc("Do not apply CDSL typing rules (Use C-like type inference)."),
+                          cl::cat(ToolOptions));
+// static cl::opt<std::string>
+//     Mattr("mattr2", cl::desc("Target specific attributes"),
+//           cl::value_desc("a1,+a2,-a3,..."), cl::cat(ToolOptions),
+//           // cl::init("+m,+fast-unaligned-access,+xcvalu,+xcvsimd"));
+//           cl::init("+m,+fast-unaligned-access"));
 
 static cl::opt<int> XLen("riscv-xlen", cl::desc("RISC-V XLEN (32 or 64 bit)"), cl::init(32));
 
@@ -118,7 +123,7 @@ int main(int argc, char **argv) {
   TokenStream ts(InputFilename.c_str());
   LLVMContext ctx;
   auto mod = std::make_unique<Module>("mod", ctx);
-  auto instrs = ParseCoreDSL2(ts, (XLen == 64), mod.get());
+  auto instrs = ParseCoreDSL2(ts, (XLen == 64), mod.get(), NoExtend);
 
   if (!SkipVerify)
     if (verifyModule(*mod, &errs()))
@@ -127,7 +132,8 @@ int main(int argc, char **argv) {
   if (PrintIR)
     llvm::outs() << *mod << "\n";
 
-  // TODO: use force
+  if (PrintIR)
+    llvm::outs() << *mod << "\n";
 
   llvm::CodeGenOptLevel Opt;
   switch (OptLevel) {
@@ -145,7 +151,9 @@ int main(int argc, char **argv) {
     break;
   }
 
-  PGArgsStruct Args{.Mattr = Mattr,
+  PGArgsStruct Args{
+                    // .ExtName = ExtName,
+                    // .Mattr = Mattr,  // Extra features to be added while compilation. Should
                     .OptLevel = Opt,
                     .Predicates = Predicates,
                     .is64Bit = (XLen == 64)};
@@ -159,5 +167,8 @@ int main(int argc, char **argv) {
   if (!SkipPat)
     if (GeneratePatterns(mod.get(), instrs, patternOut, Args))
       return -1;
+  // If statistics were requested, print them out now.
+  if (llvm::AreStatisticsEnabled())
+    llvm::PrintStatistics();
   return 0;
 }

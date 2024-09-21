@@ -6,6 +6,7 @@ The alternative to using a file like this is modifying LLVM source
 more aggressively directly.
 */
 #include "../lib/Target/RISCV/RISCVISelDAGToDAG.h"
+// #include "../lib/Target/RISCV/RISCVMacroFusion.h"
 #include "../lib/Target/RISCV/RISCVTargetMachine.h"
 #include "PatternGen.hpp"
 #include "llvm/Analysis/CGSCCPassManager.h"
@@ -116,12 +117,13 @@ public:
   ScheduleDAGInstrs *
   createMachineScheduler(MachineSchedContext *C) const override {
     const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
+    // if (ST.hasMacroFusion()) {
+    //   ScheduleDAGMILive *DAG = createGenericSchedLive(C);
+    //   DAG->addMutation(createRISCVMacroFusionDAGMutation());
+    //   return DAG;
+    // }
+    // return nullptr;
     ScheduleDAGMILive *DAG = nullptr;
-    if (false) {
-      DAG = createGenericSchedLive(C);
-      DAG->addMutation(createLoadClusterDAGMutation(
-          DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
-    }
     const auto &MacroFusions = ST.getMacroFusions();
     if (!MacroFusions.empty()) {
       DAG = DAG ? DAG : createGenericSchedLive(C);
@@ -133,6 +135,12 @@ public:
   ScheduleDAGInstrs *
   createPostMachineScheduler(MachineSchedContext *C) const override {
     const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
+    // if (ST.hasMacroFusion()) {
+    //   ScheduleDAGMI *DAG = createGenericSchedPostRA(C);
+    //   DAG->addMutation(createRISCVMacroFusionDAGMutation());
+    //   return DAG;
+    // }
+    // return nullptr;
     const auto &MacroFusions = ST.getMacroFusions();
     if (!MacroFusions.empty()) {
       ScheduleDAGMI *DAG = createGenericSchedPostRA(C);
@@ -146,6 +154,7 @@ public:
   bool addPreISel() override;
   bool addInstSelector() override;
   bool addIRTranslator() override;
+  void addPreLegalizeMachineIR() override;
   bool addLegalizeMachineIR() override;
   bool addRegBankSelect() override;
   bool addGlobalInstructionSelect() override;
@@ -207,6 +216,13 @@ bool RISCVPatternPassConfig::addInstSelector() {
 bool RISCVPatternPassConfig::addIRTranslator() {
   addPass(new IRTranslator(getOptLevel()));
   return false;
+}
+
+void RISCVPatternPassConfig::addPreLegalizeMachineIR() {
+  if (getOptLevel() == CodeGenOptLevel::None) {
+    addPass(createRISCVO0PreLegalizerCombiner());
+  } else {                                                                                                             addPass(createRISCVPreLegalizerCombiner());
+  }
 }
 
 bool RISCVPatternPassConfig::addLegalizeMachineIR() {
@@ -373,7 +389,7 @@ void optimizeModule(llvm::TargetMachine *machine, llvm::Module *module,
   CGSCCAnalysisManager CGAM;
   ModuleAnalysisManager MAM;
   PipelineTuningOptions PTO;
-  PTO.SLPVectorization = optLevel > llvm::CodeGenOptLevel::None;
+  PTO.SLPVectorization = static_cast<int>(optLevel) > 1;
 
   // Create the new pass manager builder.
   // Take a look at the PassBuilder constructor parameters for more

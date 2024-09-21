@@ -649,6 +649,7 @@ def PulpV4 : RegisterClass<"RISCV", [v4i8], 32, (add
   )> {
     let RegInfos = XLenRI;
 }
+
 // Shadow Stack register
 def SSP    : RISCVReg<0, "ssp">;
 
