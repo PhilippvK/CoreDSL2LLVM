@@ -364,6 +364,7 @@ struct PatternError {
 std::string Errors[] = {"success",        "multiple blocks", "expected return",
                         "expected store", "load format",     "immediate format",
                         "format"};
+
 llvm::Statistic* ErrorStats[] = {
   &PatternGenNumErrorMultipleBlocks,
   &PatternGenNumErrorFormatReturn,
@@ -388,7 +389,8 @@ static const std::unordered_map<unsigned, std::string> cmpStr = {
 
 std::string lltToString(LLT Llt) {
   if (Llt.isFixedVector())
-    return "v" + std::to_string(Llt.getElementCount().getFixedValue()) + lltToString(Llt.getElementType());
+    return "v" + std::to_string(Llt.getElementCount().getFixedValue()) +
+           lltToString(Llt.getElementType());
   if (Llt.isScalar())
     return "i" + std::to_string(Llt.getSizeInBits());
   assert(0 && "invalid type");
@@ -440,7 +442,7 @@ public:
   virtual LLT getRegisterTy(int OperandId) const {
     if (OperandId == -1)
       return Type;
-    return LLT(MVT::INVALID_SIMPLE_VALUE_TYPE);
+    return LLT();
   }
   virtual ~PatternNode() {}
 };
@@ -474,7 +476,7 @@ struct NOpNode : public PatternNode {
       if (T.isValid())
         return T;
     }
-    return LLT(MVT::INVALID_SIMPLE_VALUE_TYPE);
+    return LLT();
   }
   static bool classof(const PatternNode *P) { return P->getKind() == PN_NOp; }
 };
@@ -487,8 +489,8 @@ struct ShuffleNode : public PatternNode {
   ArrayRef<int> Mask;
 
   ShuffleNode(LLT Type, int Op, std::unique_ptr<PatternNode> First,
-            std::unique_ptr<PatternNode> Second, ArrayRef<int> Mask)
-            // std::unique_ptr<PatternNode> Second, std::unique_ptr<ArrayRef<int>> Mask)
+              std::unique_ptr<PatternNode> Second, ArrayRef<int> Mask)
+              // std::unique_ptr<PatternNode> Second, std::unique_ptr<ArrayRef<int>> Mask)
       : PatternNode(PN_Shuffle, Type, false), Op(Op), First(std::move(First)),
         Second(std::move(Second)), Mask(std::move(Mask)) {}
 
@@ -502,7 +504,9 @@ struct ShuffleNode : public PatternNode {
       }
       MaskStr += std::to_string(Mask[i]);
     }
-    std::string OpString = "(vector_shuffle<" + MaskStr + "> " + First->patternString(Indent + 1) + ", " + Second->patternString(Indent + 1) + ")";
+    std::string OpString = "(vector_shuffle<" + MaskStr + "> " +
+                           First->patternString(Indent + 1) + ", " +
+                           Second->patternString(Indent + 1) + ")";
 
     // Explicitly specifying types for all ops increases pattern compile time
     // significantly, so we only do for ops where deduction fails otherwise.
@@ -519,11 +523,12 @@ struct ShuffleNode : public PatternNode {
 
     auto FirstT = First->getRegisterTy(OperandId);
     auto SecondT = Second->getRegisterTy(OperandId);
-    // auto ThirdT = Third->getRegisterTy(OperandId);
     return FirstT.isValid() ? FirstT : SecondT;
   }
 
-  static bool classof(const PatternNode *p) { return p->getKind() == PN_Shuffle; }
+  static bool classof(const PatternNode *p) {
+    return p->getKind() == PN_Shuffle;
+  }
 };
 
 struct TernopNode : public PatternNode {
@@ -533,7 +538,8 @@ struct TernopNode : public PatternNode {
   std::unique_ptr<PatternNode> Third;
 
   TernopNode(LLT Type, int Op, std::unique_ptr<PatternNode> First,
-            std::unique_ptr<PatternNode> Second, std::unique_ptr<PatternNode> Third)
+            std::unique_ptr<PatternNode> Second,
+            std::unique_ptr<PatternNode> Third)
       : PatternNode(PN_Ternop, Type, false), Op(Op), First(std::move(First)),
         Second(std::move(Second)), Third(std::move(Third)) {}
 
@@ -569,7 +575,9 @@ struct TernopNode : public PatternNode {
     return FirstT.isValid() ? FirstT : (SecondT.isValid() ? SecondT : ThirdT);
   }
 
-  static bool classof(const PatternNode *p) { return p->getKind() == PN_Ternop; }
+  static bool classof(const PatternNode *p) {
+    return p->getKind() == PN_Ternop;
+  }
 };
 
 struct BinopNode : public PatternNode {
@@ -639,12 +647,13 @@ struct BinopNode : public PatternNode {
     // significantly, so we only do for ops where deduction fails otherwise.
     bool PrintType = false;
     bool PrintSrcTypes = false;
+    PrintType |= Type.getSizeInBits() != XLen;
     switch (Op) {
     case TargetOpcode::G_SHL:
     case TargetOpcode::G_LSHR:
     case TargetOpcode::G_ASHR:
-      PrintType = true;
-      PrintSrcTypes = true;
+      PrintSrcTypes |= true;
+      PrintType |= true;
       break;
     default:
       break;
@@ -726,7 +735,7 @@ struct SelectNode : public PatternNode {
       if (T.isValid())
         return T;
     }
-    return LLT(MVT::INVALID_SIMPLE_VALUE_TYPE);
+    return LLT();
   }
 
   static bool classof(const PatternNode *p) {
@@ -778,17 +787,24 @@ struct UnopNode : public PatternNode {
 };
 
 struct ConstantNode : public PatternNode {
-  uint32_t Constant;
-  ConstantNode(LLT Type, uint32_t c)
+<<<<<<< HEAD
+  uint64_t Constant;
+  ConstantNode(LLT Type, uint64_t c)
       : PatternNode(PN_Constant, Type, true), Constant(c) {}
 
   std::string patternString(int Indent = 0) override {
+
+      std::string ConstantStr = (XLen == 64)
+                                    ? std::to_string((int64_t)Constant)
+                                    : std::to_string((int32_t)Constant);
     if (Type.isFixedVector()) {
+
+
       std::string TypeStr = lltToString(Type);
-      return "(" + TypeStr + " (" + RegT + " " + std::to_string((int)Constant) +
+      return "(" + TypeStr + " (" + RegT + " " + ConstantStr +
              "))";
     }
-    return "(" + RegT + " " + std::to_string((int)Constant) + ")";
+    return "(" + lltToString(Type) + " " + ConstantStr + ")";
   }
 
   static bool classof(const PatternNode *p) {
@@ -928,19 +944,23 @@ traverseOperand(MachineRegisterInfo &MRI, MachineInstr &Cur, int i) {
 static std::tuple<PatternError, std::unique_ptr<PatternNode>,
                   std::unique_ptr<PatternNode>, std::unique_ptr<PatternNode>>
 traverseTernopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
+<<<<<<< HEAD
                       int start = 1) {
   assert(Cur.getOperand(start).isReg() && "expected register");
   auto *First = MRI.getOneDef(Cur.getOperand(start).getReg());
   if (!First)
-    return std::make_tuple(PatternError(FORMAT, &Cur), nullptr, nullptr, nullptr);
+    return std::make_tuple(PatternError(FORMAT, &Cur), nullptr, nullptr,
+                           nullptr);
   assert(Cur.getOperand(start + 1).isReg() && "expected register");
   auto *Second = MRI.getOneDef(Cur.getOperand(start + 1).getReg());
   if (!Second)
-    return std::make_tuple(PatternError(FORMAT, &Cur), nullptr, nullptr, nullptr);
+    return std::make_tuple(PatternError(FORMAT, &Cur), nullptr, nullptr,
+                           nullptr);
   assert(Cur.getOperand(start + 2).isReg() && "expected register");
   auto *Third = MRI.getOneDef(Cur.getOperand(start + 2).getReg());
   if (!Third)
-    return std::make_tuple(PatternError(FORMAT, &Cur), nullptr, nullptr, nullptr);
+    return std::make_tuple(PatternError(FORMAT, &Cur), nullptr, nullptr,
+                           nullptr);
 
   auto [ErrFirst, NodeFirst] = traverse(MRI, *First->getParent());
   if (ErrFirst)
@@ -954,7 +974,8 @@ traverseTernopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
   if (ErrThird)
     return std::make_tuple(ErrThird, nullptr, nullptr, nullptr);
 
-  return std::make_tuple(SUCCESS, std::move(NodeFirst), std::move(NodeSecond), std::move(NodeThird));
+  return std::make_tuple(SUCCESS, std::move(NodeFirst), std::move(NodeSecond),
+                         std::move(NodeThird));
 }
 
 static std::tuple<PatternError, std::unique_ptr<PatternNode>,
@@ -982,7 +1003,7 @@ traverseBinopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
 
 static std::tuple<PatternError, std::unique_ptr<PatternNode>>
 traverseUnopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
-                      int start = 1) {
+                     int start = 1) {
   assert(Cur.getOperand(start).isReg() && "expected register");
   auto *RHS = MRI.getOneDef(Cur.getOperand(start).getReg());
   if (!RHS)
@@ -996,13 +1017,14 @@ traverseUnopOperands(MachineRegisterInfo &MRI, MachineInstr &Cur,
 
 static std::tuple<PatternError, std::vector<std::unique_ptr<PatternNode>>>
 traverseNOpOperands(MachineRegisterInfo &MRI, MachineInstr &Cur, size_t N,
-                      int start = 1) {
+                    int start = 1) {
   std::vector<std::unique_ptr<PatternNode>> operands(N);
   for (size_t i = 0; i < N; i++) {
       assert(Cur.getOperand(start + i).isReg() && "expected register");
       auto *Node = MRI.getOneDef(Cur.getOperand(start + i).getReg());
       if (!Node) {
-        return std::make_tuple(PatternError(FORMAT, &Cur), std::vector<std::unique_ptr<PatternNode>>());
+      return std::make_tuple(PatternError(FORMAT, &Cur),
+                             std::vector<std::unique_ptr<PatternNode>>());
       }
 
       auto [Err_, Node_] = traverse(MRI, *Node->getParent());
@@ -1104,63 +1126,6 @@ static std::pair<PatternError, std::unique_ptr<PatternNode>>
 traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
 
   switch (Cur.getOpcode()) {
-  case TargetOpcode::G_BUILD_VECTOR: {
-    size_t N = Cur.getNumOperands();
-    auto [Err, operands] = traverseNOpOperands(MRI, Cur, N - 1);
-    if (Err)
-      return std::make_pair(Err, nullptr);
-    assert(Cur.getOperand(0).isReg() && "expected register");
-    auto Node = std::make_unique<NOpNode>(
-        MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
-        std::move(operands));
-        // std::move(operands));
-
-    return std::make_pair(SUCCESS, std::move(Node));
-  }
-  case TargetOpcode::G_FSHL:
-  case TargetOpcode::G_FSHR:
-  case TargetOpcode::G_SELECT:
-  case TargetOpcode::G_INSERT_VECTOR_ELT: {
-    auto [Err, NodeFirst, NodeSecond, NodeThird] = traverseTernopOperands(MRI, Cur);
-    if (Err)
-      return std::make_pair(Err, nullptr);
-
-    assert(Cur.getOperand(0).isReg() && "expected register");
-    auto Node = std::make_unique<TernopNode>(
-        MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
-        std::move(NodeFirst), std::move(NodeSecond), std::move(NodeThird));
-
-    return std::make_pair(SUCCESS, std::move(Node));
-  }
-  case TargetOpcode::G_SHUFFLE_VECTOR: {
-    assert(Cur.getOperand(1).isReg() && "expected register");
-    auto *First = MRI.getOneDef(Cur.getOperand(1).getReg());
-    if (!First)
-      return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
-    assert(Cur.getOperand(2).isReg() && "expected register");
-    auto *Second = MRI.getOneDef(Cur.getOperand(2).getReg());
-    if (!Second)
-      return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
-    assert(Cur.getOperand(3).isShuffleMask() && "expected shufflemask");
-    ArrayRef<int> Mask = Cur.getOperand(3).getShuffleMask();
-    // if (!Mask)
-    //   return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
-
-    auto [ErrFirst, NodeFirst] = traverse(MRI, *First->getParent());
-    if (ErrFirst)
-      return std::make_pair(ErrFirst, nullptr);
-
-    auto [ErrSecond, NodeSecond] = traverse(MRI, *Second->getParent());
-    if (ErrSecond)
-      return std::make_pair(ErrSecond, nullptr);
-
-    assert(Cur.getOperand(0).isReg() && "expected register");
-    auto Node = std::make_unique<ShuffleNode>(
-        MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
-        std::move(NodeFirst), std::move(NodeSecond), Mask);
-
-    return std::make_pair(SUCCESS, std::move(Node));
-  }
   case TargetOpcode::G_ADD:
   case TargetOpcode::G_PTR_ADD:
   case TargetOpcode::G_SUB:
@@ -1229,9 +1194,9 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
       return std::make_pair(Err, nullptr);
 
     assert(Cur.getOperand(0).isReg() && "expected register");
-    auto Node = std::make_unique<UnopNode>(
-        MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
-        std::move(NodeR));
+    auto Node =
+        std::make_unique<UnopNode>(MRI.getType(Cur.getOperand(0).getReg()),
+                                   Cur.getOpcode(), std::move(NodeR));
 
     return std::make_pair(SUCCESS, std::move(Node));
   }
@@ -1247,11 +1212,11 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
 
     // if the bitcasted value is a register access, we need to patch the
     // register access type
-    if (auto *AsRegNode = llvm::dyn_cast<RegisterNode>(Node.get()))
-    {
+    if (auto *AsRegNode = llvm::dyn_cast<RegisterNode>(Node.get())) {
       assert(Cur.getOperand(0).isReg() && "expected register");
       AsRegNode->Type = MRI.getType(Cur.getOperand(0).getReg());
-      PatternArgs[AsRegNode->RegIdx].ArgTypeStr = lltToRegTypeStr(AsRegNode->Type);
+      PatternArgs[AsRegNode->RegIdx].ArgTypeStr =
+          lltToRegTypeStr(AsRegNode->Type);
     }
 
     return std::make_pair(SUCCESS, std::move(Node));
@@ -1260,8 +1225,10 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
   case TargetOpcode::G_ZEXTLOAD:
   case TargetOpcode::G_SEXTLOAD: {
 
+    int ReadSize;
+
     MachineMemOperand *MMO = *Cur.memoperands_begin();
-    int ReadSize = MMO->getSizeInBits();
+    ReadSize = MMO->getSizeInBits();
 
     assert(Cur.getOperand(1).isReg() && "expected register");
     auto *Addr = MRI.getOneDef(Cur.getOperand(1).getReg());
@@ -1282,9 +1249,9 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
   }
   case TargetOpcode::G_IMPLICIT_DEF: {
     assert(Cur.getOperand(0).isReg() && "expected register");
-    return std::make_pair(SUCCESS, std::make_unique<ConstantNode>(
-                                       MRI.getType(Cur.getOperand(0).getReg()),
-                                       0));
+    return std::make_pair(SUCCESS,
+                          std::make_unique<ConstantNode>(
+                              MRI.getType(Cur.getOperand(0).getReg()), 0));
   }
   case TargetOpcode::G_ICMP: {
     auto Pred = Cur.getOperand(1);
@@ -1318,6 +1285,66 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
                                        Field->ident, Idx, true, 0, Field->len,
                                        Field->type & CDSLInstr::SIGNED));
   }
+  case TargetOpcode::G_BUILD_VECTOR: {
+    size_t N = Cur.getNumOperands();
+    auto [Err, operands] = traverseNOpOperands(MRI, Cur, N - 1);
+    if (Err)
+      return std::make_pair(Err, nullptr);
+
+    assert(Cur.getOperand(0).isReg() && "expected register");
+
+    auto Node =
+        std::make_unique<NOpNode>(MRI.getType(Cur.getOperand(0).getReg()),
+                                  Cur.getOpcode(), std::move(operands));
+
+    return std::make_pair(SUCCESS, std::move(Node));
+  }
+  case TargetOpcode::G_FSHL:
+  case TargetOpcode::G_FSHR:
+  case TargetOpcode::G_SELECT:
+  case TargetOpcode::G_INSERT_VECTOR_ELT: {
+    auto [Err, NodeFirst, NodeSecond, NodeThird] =
+        traverseTernopOperands(MRI, Cur);
+    if (Err)
+      return std::make_pair(Err, nullptr);
+
+    assert(Cur.getOperand(0).isReg() && "expected register");
+    auto Node = std::make_unique<TernopNode>(
+        MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
+        std::move(NodeFirst), std::move(NodeSecond), std::move(NodeThird));
+
+    return std::make_pair(SUCCESS, std::move(Node));
+  }
+  case TargetOpcode::G_SHUFFLE_VECTOR: {
+    assert(Cur.getOperand(1).isReg() && "expected register");
+    auto *First = MRI.getOneDef(Cur.getOperand(1).getReg());
+    if (!First)
+      return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
+    assert(Cur.getOperand(2).isReg() && "expected register");
+    auto *Second = MRI.getOneDef(Cur.getOperand(2).getReg());
+    if (!Second)
+      return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
+    assert(Cur.getOperand(3).isShuffleMask() && "expected shufflemask");
+    ArrayRef<int> Mask = Cur.getOperand(3).getShuffleMask();
+
+    // if (!Mask)
+    //   return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
+
+    auto [ErrFirst, NodeFirst] = traverse(MRI, *First->getParent());
+    if (ErrFirst)
+      return std::make_pair(ErrFirst, nullptr);
+
+    auto [ErrSecond, NodeSecond] = traverse(MRI, *Second->getParent());
+    if (ErrSecond)
+      return std::make_pair(ErrSecond, nullptr);
+
+    assert(Cur.getOperand(0).isReg() && "expected register");
+    auto Node = std::make_unique<ShuffleNode>(
+        MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
+        std::move(NodeFirst), std::move(NodeSecond), Mask);
+
+    return std::make_pair(SUCCESS, std::move(Node));
+  }
   }
 
   return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
@@ -1346,7 +1373,7 @@ generatePattern(MachineFunction &MF) {
 
   auto &Store = *Instrs;
   MachineMemOperand *MMO = *Store.memoperands_begin();
-  if (MMO->getSizeInBits() != XLen)
+  if (MMO->getSizeInBits() != XLen && MMO->getSizeInBits() != 32)
     return std::make_pair(FORMAT_STORE, nullptr);
 
   auto *Addr = MRI.getOneDef(Store.getOperand(1).getReg());
@@ -1439,9 +1466,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   OutsString = OutsString.substr(0, OutsString.size() - 2);
 
   auto &OutStream = *PatternGenArgs::OutStream;
-  auto &ExtName = PatternGenArgs::Args.ExtName;
 
-  OutStream << "let hasSideEffects = 0, mayLoad = " + std::to_string((int)MayLoad) +
+  OutStream << "let hasSideEffects = 0, mayLoad = " +
+                   std::to_string((int)MayLoad) +
                    ", mayStore = " + std::to_string((int)MayStore) +
                    ", "
                    "isCodeGenOnly = 1";

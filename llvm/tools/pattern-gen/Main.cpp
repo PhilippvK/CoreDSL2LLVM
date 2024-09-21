@@ -53,9 +53,8 @@ static cl::opt<bool> SkipVerify("skip-verify", cl::desc("Skip verification step.
                           cl::cat(ToolOptions));
 static cl::opt<bool> PrintIR("print-ir", cl::desc("Print LLVM-IR module."),
                           cl::cat(ToolOptions));
-
-static cl::opt<std::string> ExtName("ext", cl::desc("Target extension"),
-                                    cl::cat(ToolOptions), cl::init("ExtXcvsimd"));
+// static cl::opt<std::string> ExtName("ext", cl::desc("Target extension"),
+//                                     cl::cat(ToolOptions), cl::init("ExtXcvsimd"));
 static cl::opt<bool> NoExtend("no-extend", cl::desc("Do not apply CDSL typing rules (Use C-like type inference)."),
                           cl::cat(ToolOptions));
 // static cl::opt<std::string>
@@ -133,6 +132,9 @@ int main(int argc, char **argv) {
   if (PrintIR)
     llvm::outs() << *mod << "\n";
 
+  if (PrintIR)
+    llvm::outs() << *mod << "\n";
+
   llvm::CodeGenOptLevel Opt;
   switch (OptLevel) {
   case '0':
@@ -149,7 +151,8 @@ int main(int argc, char **argv) {
     break;
   }
 
-  PGArgsStruct Args{.ExtName = ExtName,
+  PGArgsStruct Args{
+                    // .ExtName = ExtName,
                     // .Mattr = Mattr,  // Extra features to be added while compilation. Should
                     .OptLevel = Opt,
                     .Predicates = Predicates,

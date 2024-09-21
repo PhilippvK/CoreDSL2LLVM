@@ -2,6 +2,8 @@
 This repo implements an LLVM-based tool for automatic generation of Instruction Selection Patterns for GlobalISel.
 Patterns are generated from CoreDSL2 descriptions of instruction behavior.
 
+The original version of this tool (targeting LLVM ISelDAG) was written for my [Bachelor's Thesis at TUM](https://github.com/user-attachments/files/17065465/Thesis_CoreDSL2LLVM.pdf).
+
 ## Build Process
 Everything is tied into the [LLVM build system](https://llvm.org/docs/CMake.html). Generally:
 
@@ -11,8 +13,9 @@ Everything is tied into the [LLVM build system](https://llvm.org/docs/CMake.html
 4. `cmake --build .`
 
 
-## Usage
-Pattern Generation is implemented as an additional LLVM tool (`pattern-gen`) within the LLVM tree. Run `./llvm/build/bin/pattern-gen core_descs/Example.core_desc` to generate a pattern for an example instruction.
+C-like languages use the [Clang](https://clang.llvm.org/) frontend. This
+component compiles C, C++, Objective-C, and Objective-C++ code into LLVM bitcode
+-- and from there into object files, using LLVM.
 
 ## Example
 

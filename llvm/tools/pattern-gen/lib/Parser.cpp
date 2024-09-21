@@ -2,6 +2,7 @@
 #include "Token.hpp"
 #include "TokenStream.hpp"
 #include "InstrInfo.hpp"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Attributes.h"
@@ -104,7 +105,6 @@ static void pop_var_scope()
         if (vstack.empty())
             variables.erase(vname);
     }
-
     scopeDepth--;
 }
 
@@ -135,6 +135,14 @@ static void implicit_truncation(TokenStream& ts)
 static void __attribute__((noreturn)) not_implemented(TokenStream& ts)
 {
     error("not implemented", ts);
+}
+
+static void add_variable(TokenStream ts, int identIdx, Value v)
+{
+    if (!variables[identIdx].empty() && variables[identIdx].back().scope == scopeDepth)
+        error(("redefinition: " + std::string(ts.GetIdent(identIdx))).c_str(), ts);
+
+    variables[identIdx].push_back(Variable{v, scopeDepth});
 }
 
 static Token pop_cur(TokenStream& ts, TokenType expected)
@@ -323,8 +331,7 @@ Value gen_assign(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build
 {
     auto& ctx = func->getContext();
 
-    if (!left.isLValue)
-        error("cannot assign rvalue", ts);
+    check_lvalue(left, ts, build.GetInsertBlock());
 
     if (left.bitWidth < right.bitWidth && op == Assignment)
         implicit_truncation(ts);
@@ -520,6 +527,41 @@ Value gen_binop(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build,
     return v;
 }
 
+Value gen_ternary_relaxed(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build, TokenType op, Value left,
+                    Value right)
+{
+    // In C, the ternary operator only evaluates either the true expr or the false expr, not both. Doing that has
+    // negative effects on pattern generation though, so we evaluate both and then select between results here.
+    // This assumes that evaluation of both has no side effects! Ideally we would select between this and gen_ternary
+    // depending on if expressions have side effects or not (particularly ++/--).
+    auto valTrue = ParseExpression(ts, func, build);
+    pop_cur(ts, Colon);
+    auto valFalse = ParseExpression(ts, func, build);
+
+    promote_lvalue(build, valTrue);
+    promote_lvalue(build, valFalse);
+
+    promote_lvalue(build, left);
+    auto cond = build.CreateICmpNE(left.ll, llvm::ConstantInt::get(left.ll->getType(), 0));
+
+    if (valTrue.ll->getType() != valFalse.ll->getType())
+    {
+        if (valTrue.bitWidth > valFalse.bitWidth)
+        {
+            valFalse.bitWidth = valTrue.bitWidth;
+            fit_to_size(valFalse, build);
+        }
+        else if (valTrue.bitWidth < valFalse.bitWidth)
+        {
+            valTrue.bitWidth = valFalse.bitWidth;
+            fit_to_size(valTrue, build);
+        }
+    }
+
+    auto result = build.CreateSelect(cond, valTrue.ll, valFalse.ll);
+    return Value{result, valTrue.isSigned || valFalse.isSigned};
+}
+
 Value gen_ternary(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& build, TokenType op, Value left,
                     Value right)
 {
@@ -545,7 +587,6 @@ Value gen_ternary(TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>& buil
     build.SetInsertPoint(blockFalse);
     auto valFalse = ParseExpression(ts, func, build);
     promote_lvalue(build, valFalse);
-
 
     if (valTrue.ll->getType() != valFalse.ll->getType())
     {
@@ -639,8 +680,7 @@ Value gen_inc(bool isPost, TokenStream& ts, llvm::Function* func, llvm::IRBuilde
 {
     auto& ctx = func->getContext();
 
-    if (!left.isLValue)
-        error("cannot assign rvalue", ts);
+    check_lvalue(left, ts, build.GetInsertBlock());
 
     auto pre = build.CreateAlignedLoad(llvm::Type::getIntNTy(ctx, left.bitWidth), left.ll, llvm::Align(ceil_to_pow2(left.bitWidth) / 8));
     auto post = build.CreateAdd(pre, llvm::ConstantInt::get(pre->getType(), (op == Decrement) ? -1 : 1));
@@ -689,7 +729,7 @@ static const Operator precTable[] =
     [BitwiseXOR]           = Operator(9,  0, 0, gen_binop),
     [LogicalAND]           = Operator(12, 0, 1, gen_logical),
     [LogicalOR]            = Operator(13, 0, 1, gen_logical),
-    [Ternary]              = Operator(14, 1, 1, gen_ternary),
+    [Ternary]              = Operator(14, 1, 1, gen_ternary_relaxed),
     [BitwiseConcat]        = Operator(11, 0, 0, gen_concat),
     [Assignment]           = Operator(15, 1, 0, gen_assign),
     [AssignmentAdd]        = Operator(15, 1, 0, gen_binop),
@@ -739,8 +779,9 @@ Value ParseExpressionTerminal(TokenStream& ts, llvm::Function* func, llvm::IRBui
 
                 return Value{addrPtr, 8 << (memIt - memTypes.begin()), false};
             }
-            if (t.ident.str == "X")
+            if (t.ident.str == "X" || t.ident.str == "XW")
             {
+                bool sizeIs32 = t.ident.str == "XW";
                 pop_cur(ts, ABrOpen);
                 auto ident = pop_cur(ts, Identifier).ident;
                 pop_cur(ts, ABrClose);
@@ -750,8 +791,8 @@ Value ParseExpressionTerminal(TokenStream& ts, llvm::Function* func, llvm::IRBui
                 {
                     if (!(match->type & CDSLInstr::REG))
                         error((std::string(t.ident.str) + " is used as a register ID but not defined as such").c_str(), ts);
-
-                    return Value{func->getArg(match - curInstr->fields.begin()), xlen,
+                    sizeIs32 |= (match->type & CDSLInstr::IS_32_BIT);
+                    return Value{func->getArg(match - curInstr->fields.begin()), sizeIs32 ? 32 : xlen,
                         (bool)(match->type & CDSLInstr::SIGNED_REG)};
                 }
                 error(("undefined register ID: " + std::string(ident.str)).c_str(), ts);
@@ -955,11 +996,7 @@ void ParseDeclaration (TokenStream& ts, llvm::Function* func, llvm::IRBuilder<>&
     if (init.has_value())
         build.CreateStore(init->ll, v.ll, false);
 
-    if (!variables[identIdx].empty() && variables[identIdx].back().scope == scopeDepth)
-        error(("redefinition: " + std::string(ident)).c_str(), ts);
-
-    variables[identIdx].push_back((Variable){v, scopeDepth});
-
+    add_variable(ts, identIdx, v);
     pop_cur(ts, Semicolon);
 }
 
@@ -1090,6 +1127,7 @@ void ParseOperands(TokenStream& ts, CDSLInstr& instr)
             {"in", {FieldType::IN, 0}},
             {"out", {FieldType::OUT, 0}},
             {"inout", {(FieldType::IN|FieldType::OUT), 0}},
+            {"is_32_bit", {FieldType::IS_32_BIT, 0}}
         };
 
         uint acc = 0;
@@ -1148,7 +1186,6 @@ void ParseOperands(TokenStream& ts, CDSLInstr& instr)
 
     if (scope) pop_cur(ts, CBrClose);
 }
-
 
 void ParseEncoding(TokenStream& ts, CDSLInstr& instr)
 {
@@ -1323,7 +1360,6 @@ void ParseBehaviour (TokenStream& ts, CDSLInstr& instr, llvm::Module* mod, Token
         if (curInstr->fields[i].type & CDSLInstr::OUT)
             func->getArg(i)->addAttr(llvm::Attribute::NoAlias);
 
-
     entry = llvm::BasicBlock::Create(ctx, "", func);
     llvm::IRBuilder<> build(entry);
 
@@ -1368,6 +1404,13 @@ std::vector<CDSLInstr> ParseCoreDSL2(TokenStream& ts, bool is64Bit, llvm::Module
         {
             reset_globals();
             ++PatternGenNumInstructionsParsed;
+
+            // add XLEN and RFS as constants for now.
+            add_variable(ts, ts.GetIdentIdx("XLEN"),
+                Value{llvm::ConstantInt::get(regT, xlen)});
+            add_variable(ts, ts.GetIdentIdx("RFS"),
+                Value{llvm::ConstantInt::get(regT, 32)});
+
             Token ident = pop_cur(ts, Identifier);
             pop_cur(ts, CBrOpen);
             CDSLInstr instr{.name = std::string(ident.ident.str)};
