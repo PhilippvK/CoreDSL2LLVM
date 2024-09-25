@@ -1218,7 +1218,7 @@ traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
   case TargetOpcode::G_SEXTLOAD: {
 
     MachineMemOperand *MMO = *Cur.memoperands_begin();
-    int ReadSize = MMO->getSizeInBits();
+    int ReadSize = MMO->getSizeInBits().getValue();
 
     assert(Cur.getOperand(1).isReg() && "expected register");
     auto *Addr = MRI.getOneDef(Cur.getOperand(1).getReg());
