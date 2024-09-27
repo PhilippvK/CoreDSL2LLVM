@@ -184,7 +184,9 @@ static bool mutationIsSane(const LegalizeRule &Rule,
 }
 #endif
 
+
 LegalizeActionStep LegalizeRuleSet::apply(const LegalityQuery &Query) const {
+  // TODO: parse custom legalizer settings first
   LLVM_DEBUG(dbgs() << "Applying legalizer ruleset to: "; Query.print(dbgs());
              dbgs() << "\n");
   if (Rules.empty()) {
@@ -355,7 +357,7 @@ LegalizerInfo::getAction(const MachineInstr &MI,
   SmallVector<LegalityQuery::MemDesc, 2> MemDescrs;
   for (const auto &MMO : MI.memoperands())
     MemDescrs.push_back({*MMO});
-
+  // TODO: extract name of MI here!
   return getAction({MI.getOpcode(), Types, MemDescrs});
 }
 

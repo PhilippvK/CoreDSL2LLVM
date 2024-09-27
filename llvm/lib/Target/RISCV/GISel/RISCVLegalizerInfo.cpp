@@ -77,10 +77,10 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   const LLT s16 = LLT::scalar(16);
   const LLT s32 = LLT::scalar(32);
   const LLT s64 = LLT::scalar(64);
-  const LLT v4i8 = LLT::fixed_vector(4, LLT::scalar(8));
-  const LLT v2i16 = LLT::fixed_vector(2, LLT::scalar(16));
+  const LLT v4s8 = LLT::fixed_vector(4, LLT::scalar(8));
+  const LLT v2s16 = LLT::fixed_vector(2, LLT::scalar(16));
 
-  auto XCVVecTys = {v4i8, v2i16};
+  auto XCVVecTys = {v4s8, v2s16};
 
   const LLT nxv1s1 = LLT::scalable_vector(1, s1);
   const LLT nxv2s1 = LLT::scalable_vector(2, s1);
@@ -294,6 +294,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
                                          LegalityPredicates::typeInSet(0, XCVVecTys)));
 
     getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor(XCVVecTys);
+    ShiftActions.legalFor(XCVVecTys);
   }
 
   auto &ExtLoadActions =
@@ -386,12 +387,16 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   auto &AbsActions = getActionDefinitionsBuilder(G_ABS);
   if (ST.hasStdExtZbb())
     AbsActions.customFor({s32, sXLen}).minScalar(0, sXLen);
+  else if (ST.hasVendorXCValu())
+    AbsActions.legalFor({s32}).minScalar(0, sXLen);
   AbsActions.lower();
 
   auto &MinMaxActions =
       getActionDefinitionsBuilder({G_UMAX, G_UMIN, G_SMAX, G_SMIN});
   if (ST.hasStdExtZbb())
     MinMaxActions.legalFor({sXLen}).minScalar(0, sXLen);
+  else if (ST.hasVendorXCValu())
+    MinMaxActions.legalFor({s32}).minScalar(0, sXLen);
   MinMaxActions.lower();
 
   getActionDefinitionsBuilder(G_FRAME_INDEX).legalFor({p0});
