@@ -816,7 +816,6 @@ struct RegisterNode : public PatternNode {
   std::string patternString(int Indent = 0) override {
     std::string TypeStr = lltToString(Type);
     bool PrintType = false;
-    // bool PrintType = true;
 
     if (IsImm) {
       // Immediate Operands
@@ -838,6 +837,7 @@ struct RegisterNode : public PatternNode {
 
     // Vector Types (currently rv32 only)
     if ((uint64_t)Size == 32 && XLen == 32) {
+      PrintType = true;
       std::string Str;
       if (Type.isFixedVector() && Type.getSizeInBits() == 32 &&
           Type.getElementType().isScalar() &&
