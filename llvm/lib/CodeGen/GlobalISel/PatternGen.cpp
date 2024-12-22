@@ -815,7 +815,10 @@ struct RegisterNode : public PatternNode {
 
   std::string patternString(int Indent = 0) override {
     std::string TypeStr = lltToString(Type);
-    bool PrintType = false;
+    // As soon as vector registers appear in the pattern,
+    // we need to print all types...
+    // bool PrintType = false;
+    bool PrintType = true;
 
     if (IsImm) {
       // Immediate Operands
