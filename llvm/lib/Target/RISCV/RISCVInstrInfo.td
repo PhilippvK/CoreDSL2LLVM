@@ -2314,3 +2314,7 @@ include "RISCVInstrInfoXAndes.td"
 //===----------------------------------------------------------------------===//
 
 include "RISCVInstrGISel.td"
+
+
+include "patternsInstrFormat.td"
+include "patterns.td"

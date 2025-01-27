@@ -555,6 +555,9 @@ int runOptPipeline(llvm::Module *M, bool Is64Bit, std::string Mattr,
 
 int runPatternGenPipeline(llvm::Module *M, bool Is64Bit, std::string Mattr) {
 
+  SmallVector<char> Out;
+  raw_svector_ostream SVOS{Out};
+  raw_pwrite_stream *OS = &SVOS;
   auto Target = getTargetMachine(Is64Bit, Mattr);
 
   if (codegen::getFloatABIForCalls() != FloatABI::Default)
@@ -618,11 +621,25 @@ int runPatternGenPipeline(llvm::Module *M, bool Is64Bit, std::string Mattr) {
         return 1;
     }
 
-    // Before executing passes, print the final values of the LLVM options.
-    cl::PrintOptionValues();
-
-    PM.run(*M);
+  // Construct a custom pass pipeline that starts after instruction
+  // selection.
+  if (Target->addPassesToEmitFile(PM, *OS, nullptr, codegen::getFileType(),
+                                  false, MMIWP)) {
+    assert(0 && "target does not support generation of this file type");
   }
+
+  const_cast<TargetLoweringObjectFile *>(Target->getObjFileLowering())
+      ->Initialize(MMIWP->getMMI().getContext(), *Target);
+  if (MIR) {
+    assert(MMIWP && "Forgot to create MMIWP?");
+    if (MIR->parseMachineFunctions(*M, MMIWP->getMMI()))
+      return 1;
+  }
+
+  // Before executing passes, print the final values of the LLVM options.
+  cl::PrintOptionValues();
+
+  PM.run(*M);
 
   return 0;
 }

@@ -828,6 +828,7 @@ public:
     OPM_IntrinsicID,
     OPM_CmpPredicate,
     OPM_Instruction,
+    OPM_OtherInstruction,
     OPM_Int,
     OPM_LiteralInt,
     OPM_LLT,
@@ -1919,6 +1920,43 @@ public:
   }
 };
 
+class OtherUseInstructionOperandMatcher : public OperandPredicateMatcher {
+protected:
+  std::unique_ptr<InstructionMatcher> InsnMatcher;
+  GISelFlags Flags;
+  unsigned ExpectedOtherOpIdx;
+
+public:
+  OtherUseInstructionOperandMatcher(unsigned InsnVarID, unsigned OpIdx,
+                                    unsigned ExpectedOtherOpIdx,
+                                    RuleMatcher &Rule, StringRef SymbolicName,
+                                    bool NumOpsCheck = true)
+      : OperandPredicateMatcher(OPM_OtherInstruction, InsnVarID, OpIdx),
+        InsnMatcher(new InstructionMatcher(Rule, SymbolicName, NumOpsCheck)),
+        Flags(Rule.getGISelFlags()), ExpectedOtherOpIdx(ExpectedOtherOpIdx) {}
+
+  static bool classof(const PredicateMatcher *P) {
+    return P->getKind() == OPM_OtherInstruction;
+  }
+
+  InstructionMatcher &getInsnMatcher() const { return *InsnMatcher; }
+
+  void emitCaptureOpcodes(MatchTable &Table, RuleMatcher &Rule) const;
+  void emitPredicateOpcodes(MatchTable &Table,
+                            RuleMatcher &Rule) const override {
+    emitCaptureOpcodes(Table, Rule);
+    InsnMatcher->emitPredicateOpcodes(Table, Rule);
+  }
+
+  bool isHigherPriorityThan(const OperandPredicateMatcher &B) const override;
+
+  /// Report the maximum number of temporary operands needed by the predicate
+  /// matcher.
+  unsigned countRendererFns() const override {
+    return InsnMatcher->countRendererFns();
+  }
+};
+
 //===- Actions ------------------------------------------------------------===//
 class OperandRenderer {
 public:
@@ -2300,7 +2338,9 @@ public:
     AK_DebugComment,
     AK_BuildMI,
     AK_BuildConstantMI,
+    AK_MarkEraseInst,
     AK_EraseInst,
+    AK_CheckSafeToMove,
     AK_ReplaceReg,
     AK_ConstraintOpsToDef,
     AK_ConstraintOpsToRC,
@@ -2416,6 +2456,22 @@ public:
   void emitActionOpcodes(MatchTable &Table, RuleMatcher &Rule) const override;
 };
 
+class MarkEraseInstAction : public MatchAction {
+  unsigned InsnID;
+
+public:
+  MarkEraseInstAction(unsigned InsnID)
+      : MatchAction(AK_MarkEraseInst), InsnID(InsnID) {}
+
+  unsigned getInsnID() const { return InsnID; }
+
+  static bool classof(const MatchAction *A) {
+    return A->getKind() == AK_MarkEraseInst;
+  }
+
+  void emitActionOpcodes(MatchTable &Table, RuleMatcher &Rule) const override;
+};
+
 class EraseInstAction : public MatchAction {
   unsigned InsnID;
 
@@ -2432,6 +2488,20 @@ public:
   void emitActionOpcodes(MatchTable &Table, RuleMatcher &Rule) const override;
   bool emitActionOpcodesAndDone(MatchTable &Table,
                                 RuleMatcher &Rule) const override;
+};
+
+class CheckSafeToMoveInstAction : public MatchAction {
+  unsigned NumInsts;
+
+public:
+  CheckSafeToMoveInstAction(unsigned NumInsts)
+      : MatchAction(AK_CheckSafeToMove), NumInsts(NumInsts) {}
+
+  static bool classof(const MatchAction *A) {
+    return A->getKind() == AK_CheckSafeToMove;
+  }
+
+  void emitActionOpcodes(MatchTable &Table, RuleMatcher &Rule) const override;
 };
 
 class ReplaceRegAction : public MatchAction {
