@@ -1,0 +1,3 @@
+let Predicates = [HasVendorXCValu] in {
+
+}
