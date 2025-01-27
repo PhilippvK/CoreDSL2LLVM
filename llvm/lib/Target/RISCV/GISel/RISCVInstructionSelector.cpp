@@ -1079,6 +1079,10 @@ bool RISCVInstructionSelector::selectExtractSubvector(
 
   MI.eraseFromParent();
   return true;
+
+static bool selectPre(MachineInstr &MI)
+{
+  return false;
 }
 
 bool RISCVInstructionSelector::select(MachineInstr &MI) {

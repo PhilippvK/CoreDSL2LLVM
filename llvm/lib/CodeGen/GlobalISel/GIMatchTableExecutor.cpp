@@ -12,10 +12,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/GlobalISel/GIMatchTableExecutor.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/ReachingDefAnalysis.h"
 
 #define DEBUG_TYPE "gi-match-table-executor"
 
@@ -99,4 +101,37 @@ bool GIMatchTableExecutor::isObviouslySafeToFold(MachineInstr &MI,
   }
 
   return !MI.mayLoad();
+}
+
+bool GIMatchTableExecutor::isSafeToMove(MachineRegisterInfo &MRI,
+                                        MachineInstr &MI,
+                                        MachineInstr &IntoMI,
+                                        ArrayRef<MachineInstr*> OthersToMerge) const {
+  if (MI.getParent() != IntoMI.getParent())
+    return false;
+
+  if (MI.hasImplicitDef())
+    return false;
+
+  bool SawStore = false;
+
+  llvm::SmallPtrSet<MachineInstr *, 8> Span;
+  for (auto *It = MI.getNextNode(); It != nullptr && It != &IntoMI;
+       It = It->getNextNode()) {
+    It->isSafeToMove(SawStore);
+
+    if (llvm::find(OthersToMerge, It) == OthersToMerge.end())
+        Span.insert(It);
+  }
+
+  if (!MI.isSafeToMove(SawStore))
+    return false;
+
+  for (const auto &Def : MI.defs()) {
+    for (const auto &UseInstr : MRI.use_instructions(Def.getReg()))
+      if (Span.contains(&UseInstr))
+        return false;
+  }
+
+  return true;
 }
