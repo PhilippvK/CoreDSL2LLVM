@@ -44,6 +44,62 @@ define void @implCV_ABS(ptr %rs1, ptr noalias %rd) {
   ret void
 }
 
+define void @implCV_EXTHS(ptr %rs1, ptr noalias %rd) {
+  br i1 true, label %1, label %4
+
+1:                                                ; preds = %0
+  %2 = getelementptr i16, ptr %rs1, i32 0
+  %.v = load i16, ptr %2, align 2
+  %3 = sext i16 %.v to i32
+  store i32 %3, ptr %rd, align 4
+  br label %4
+
+4:                                                ; preds = %1, %0
+  ret void
+}
+
+define void @implCV_EXTHZ(ptr %rs1, ptr noalias %rd) {
+  br i1 true, label %1, label %4
+
+1:                                                ; preds = %0
+  %2 = getelementptr i16, ptr %rs1, i32 0
+  %.v = load i16, ptr %2, align 2
+  %3 = zext i16 %.v to i32
+  store i32 %3, ptr %rd, align 4
+  br label %4
+
+4:                                                ; preds = %1, %0
+  ret void
+}
+
+define void @implCV_EXTBS(ptr %rs1, ptr noalias %rd) {
+  br i1 true, label %1, label %4
+
+1:                                                ; preds = %0
+  %2 = getelementptr i8, ptr %rs1, i32 0
+  %.v = load i8, ptr %2, align 1
+  %3 = sext i8 %.v to i32
+  store i32 %3, ptr %rd, align 4
+  br label %4
+
+4:                                                ; preds = %1, %0
+  ret void
+}
+
+define void @implCV_EXTBZ(ptr %rs1, ptr noalias %rd) {
+  br i1 true, label %1, label %4
+
+1:                                                ; preds = %0
+  %2 = getelementptr i8, ptr %rs1, i32 0
+  %.v = load i8, ptr %2, align 1
+  %3 = zext i8 %.v to i32
+  store i32 %3, ptr %rd, align 4
+  br label %4
+
+4:                                                ; preds = %1, %0
+  ret void
+}
+
 define void @implCV_ADDN(i32 %Luimm5, ptr %rs2, ptr %rs1, ptr noalias %rd) {
   %1 = and i32 %Luimm5, 31
   %2 = icmp eq i32 %Luimm5, %1

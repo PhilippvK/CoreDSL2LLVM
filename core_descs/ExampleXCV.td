@@ -12,6 +12,30 @@ def : Pat<
 	(i32 (xor (add GPR:$rs1, (i32 (sra (i32 GPR:$rs1), (i32 (i32 31))))), (i32 (sra (i32 GPR:$rs1), (i32 (i32 31)))))),
 	(CV_ABS_ GPR:$rs1)>;
 
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCodeGenOnly = 1, Constraints = "" in def CV_EXTHS_ : RVInst_CV_EXTHS<(outs GPR:$rd), (ins GPR:$rs1)>;
+
+def : Pat<
+	(i32 GPR:$rs1),
+	(CV_EXTHS_ GPR:$rs1)>;
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCodeGenOnly = 1, Constraints = "" in def CV_EXTHZ_ : RVInst_CV_EXTHZ<(outs GPR:$rd), (ins GPR:$rs1)>;
+
+def : Pat<
+	(i32 GPR:$rs1),
+	(CV_EXTHZ_ GPR:$rs1)>;
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCodeGenOnly = 1, Constraints = "" in def CV_EXTBS_ : RVInst_CV_EXTBS<(outs GPR:$rd), (ins GPR:$rs1)>;
+
+def : Pat<
+	(i32 GPR:$rs1),
+	(CV_EXTBS_ GPR:$rs1)>;
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCodeGenOnly = 1, Constraints = "" in def CV_EXTBZ_ : RVInst_CV_EXTBZ<(outs GPR:$rd), (ins GPR:$rs1)>;
+
+def : Pat<
+	(i32 GPR:$rs1),
+	(CV_EXTBZ_ GPR:$rs1)>;
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCodeGenOnly = 1, Constraints = "" in def CV_ADDN_ : RVInst_CV_ADDN<(outs GPR:$rd), (ins uimm5:$Luimm5, GPR:$rs2, GPR:$rs1)>;
 
 def : Pat<
