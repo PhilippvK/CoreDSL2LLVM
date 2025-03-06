@@ -83,6 +83,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   const LLT s16 = LLT::scalar(16);
   const LLT s32 = LLT::scalar(32);
   const LLT s64 = LLT::scalar(64);
+  const LLT s128 = LLT::scalar(128);
   const LLT v4s8 = LLT::fixed_vector(4, LLT::scalar(8));
   const LLT v2s16 = LLT::fixed_vector(2, LLT::scalar(16));
 
@@ -139,8 +140,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
 
   auto PtrVecTys = {nxv1p0, nxv2p0, nxv4p0, nxv8p0, nxv16p0};
 
-  auto &AddSubActions =
-      getActionDefinitionsBuilder({G_ADD, G_SUB})
+  getActionDefinitionsBuilder({G_ADD, G_SUB})
           .legalFor({sXLen})
           .legalIf(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST))
           .legalIf(all(
@@ -153,8 +153,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
           .widenScalarToNextPow2(0)
           .clampScalar(0, sXLen, sXLen);
 
-  auto &LogicalActions =
-      getActionDefinitionsBuilder({G_AND, G_OR, G_XOR})
+  getActionDefinitionsBuilder({G_AND, G_OR, G_XOR})
           .legalFor({sXLen})
           .legalIf(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST))
           .legalIf(all(
@@ -179,12 +178,12 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       {G_UADDSAT, G_SADDSAT, G_USUBSAT, G_SSUBSAT, G_SSHLSAT, G_USHLSAT})
       .lower();
 
-  getActionDefinitionsBuilder({G_SHL, G_ASHR, G_LSHR})
-      .legalFor({{sXLen, sXLen}})
-      .customFor(ST.is64Bit(), {{s32, s32}})
-      .widenScalarToNextPow2(0)
-      .clampScalar(1, sXLen, sXLen)
-      .clampScalar(0, sXLen, sXLen);
+  auto &ShiftActions = getActionDefinitionsBuilder({G_SHL, G_ASHR, G_LSHR});
+  ShiftActions.legalFor({{sXLen, sXLen}})
+              .customFor(ST.is64Bit(), {{s32, s32}})
+              .widenScalarToNextPow2(0)
+              .clampScalar(1, sXLen, sXLen)
+              .clampScalar(0, sXLen, sXLen);
 
   getActionDefinitionsBuilder({G_ZEXT, G_SEXT, G_ANYEXT})
       .legalFor({{s32, s16}})
@@ -372,10 +371,6 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
     getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor(XCVVecTys);
     ShiftActions.legalFor(XCVVecTys);
   }
-
-  auto &ExtLoadActions =
-      getActionDefinitionsBuilder({G_SEXTLOAD, G_ZEXTLOAD})
-          .legalForTypesWithMemDesc({{s32, p0, s8, 8}, {s32, p0, s16, 16}});
 
   // Vector loads/stores.
   if (ST.hasVInstructions()) {
