@@ -1748,9 +1748,11 @@ InstructionCost RISCVTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
                                               const Instruction *I) {
   EVT VT = TLI->getValueType(DL, Src, true);
   // Type legalization can't handle structs
-  if (VT == MVT::Other || ST->hasGPR32V())
+  // if (VT == MVT::Other || ST->hasGPR32V()) {
+  if (VT == MVT::Other) {
     return BaseT::getMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
                                   CostKind, OpInfo, I);
+  }
 
   InstructionCost Cost = 0;
   if (Opcode == Instruction::Store && OpInfo.isConstant())
@@ -1780,7 +1782,7 @@ InstructionCost RISCVTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
   // Assume memory ops cost scale with the number of vector registers
   // possible accessed by the instruction.  Note that BasicTTI already
   // handles the LT.first term for us.
-  if (LT.second.isVector() && CostKind != TTI::TCK_CodeSize)
+  if (LT.second.isVector() && CostKind != TTI::TCK_CodeSize && !ST->hasGPR32V())
     BaseCost *= TLI->getLMULCost(LT.second);
   return Cost + BaseCost;
 
@@ -1960,6 +1962,8 @@ InstructionCost RISCVTTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
                                                  unsigned Index, Value *Op0,
                                                  Value *Op1) {
   assert(Val->isVectorTy() && "This must be a vector type");
+  if (ST->hasGPR32V())
+    return BaseT::getVectorInstrCost(Opcode, Val, CostKind, Index, Op0, Op1);
 
   if (Opcode != Instruction::ExtractElement &&
       Opcode != Instruction::InsertElement)
