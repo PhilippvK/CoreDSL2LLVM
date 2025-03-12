@@ -956,6 +956,12 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
   PatternArgs[Idx].Llt = Type;
   PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].Llt);
   PatternArgs[Idx].In = true;
+  int RegSize = XLen;
+  // int RegSize = Type.getSizeInBits();
+  // if (RegSize != XLen) {
+  //   // TODO: find better approach?
+  //   RegSize = XLen;
+  // }
 
   assert(Cur.getOperand(0).isReg() && "expected register");
   std::unique_ptr<PatternNode> Node = std::make_unique<RegisterNode>(
