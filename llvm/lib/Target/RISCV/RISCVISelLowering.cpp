@@ -141,6 +141,17 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
       addRegisterClass(MVT::f64, &RISCV::GPRPairRegClass);
   }
 
+  if (Subtarget.hasGPR32V())
+  {
+    // addRegisterClass(MVT::v4i8, &RISCV::GPR32V4RegClass);
+    // addRegisterClass(MVT::v2i16, &RISCV::GPR32V2RegClass);
+    addRegisterClass(MVT::v4i8, &RISCV::PulpV4RegClass);
+    addRegisterClass(MVT::v2i16, &RISCV::PulpV2RegClass);
+
+    //addRegisterClass(MVT::v2i32, &RISCV::PulpV2_32RegClass);
+    //addRegisterClass(MVT::v4i32, &RISCV::PulpV4_32RegClass);
+  }
+
   static const MVT::SimpleValueType BoolVecVTs[] = {
       MVT::nxv1i1,  MVT::nxv2i1,  MVT::nxv4i1, MVT::nxv8i1,
       MVT::nxv16i1, MVT::nxv32i1, MVT::nxv64i1};
