@@ -952,10 +952,16 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
   PatternArgs[Idx].Llt = Type;
   PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].Llt);
   PatternArgs[Idx].In = true;
+  int RegSize = XLen;
+  // int RegSize = Type.getSizeInBits();
+  // if (RegSize != XLen) {
+  //   // TODO: find better approach?
+  //   RegSize = XLen;
+  // }
 
   assert(Cur.getOperand(0).isReg() && "expected register");
   std::unique_ptr<PatternNode> Node = std::make_unique<RegisterNode>(
-      Type, Field->ident, Idx, false, Type.getSizeInBits(), false);
+      Type, Field->ident, Idx, false, RegSize, false);
 
   bool SizeMismatch = (int)Type.getSizeInBits() != ReadSize;
 
@@ -964,13 +970,13 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
       Node = std::make_unique<BinopNode>(
           Type, TargetOpcode::G_LSHR, std::move(Node),
           std::make_unique<ConstantNode>(Type, ReadOffset * 8));
-    if ((uint64_t)(ReadSize + ReadOffset * 8) < XLen) {
+    if ((uint64_t)(ReadSize + ReadOffset * 8) < RegSize) {
       Node = std::make_unique<BinopNode>(
           Type, TargetOpcode::G_AND, std::move(Node),
           std::make_unique<ConstantNode>(Type, (1UL << ReadSize) - 1));
     }
   } else if (Cur.getOpcode() == TargetOpcode::G_SEXTLOAD && SizeMismatch) {
-    int Shamt = XLen - ReadSize - ReadOffset * 8;
+    int Shamt = RegSize - ReadSize - ReadOffset * 8;
     auto Left = Shamt == 0 ? std::move(Node)
                            : std::make_unique<BinopNode>(
                                  Type, TargetOpcode::G_SHL, std::move(Node),
@@ -978,7 +984,7 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
 
     Node = std::make_unique<BinopNode>(
         Type, TargetOpcode::G_ASHR, std::move(Left),
-        std::make_unique<ConstantNode>(Type, XLen - ReadSize));
+        std::make_unique<ConstantNode>(Type, RegSize - ReadSize));
   }
 
   return PPattern(std::move(Node));
