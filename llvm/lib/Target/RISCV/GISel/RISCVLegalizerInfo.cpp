@@ -144,7 +144,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
           .legalIf(all(
               typeInSet(0, XCVVecTys),
               LegalityPredicate([=, &ST](const LegalityQuery &Query) {
-                return ST.hasVendorXCVsimd();
+                // return ST.hasVendorXCVsimd();
+                return ST.hasGPR32V();
               }
           )))
           .customFor(ST.is64Bit(), {s32})
@@ -344,7 +345,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
         {{s64, p0, s64, getScalarMemAlign(64)}});
   }
 
-  if (ST.hasVendorXCVsimd()) {
+  // if (ST.hasVendorXCVsimd()) {
+  if (ST.hasGPR32V()) {
     LoadActions.bitcastIf(LegalityPredicates::typeInSet(0, XCVVecTys),
                                LegalizeMutations::changeTo(0, LLT::scalar(32)));
     StoreActions.bitcastIf(LegalityPredicates::typeInSet(0, XCVVecTys),
@@ -359,9 +361,86 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
             LegalityPredicates::typeIs(1, s32),
             LegalityPredicates::typeInSet(0, XCVVecTys)));
 
-    getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor(XCVVecTys);
     ShiftActions.legalFor(XCVVecTys);
+    getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
+        .lower();
+        // .legalIf([=](const LegalityQuery &Query) {
+        //   const LLT &DstTy = Query.Types[0];
+        //   const LLT &SrcTy = Query.Types[1];
+        //   if (DstTy != SrcTy)
+        //     return false;
+        //   return llvm::is_contained(
+        //       {v2s16, v4s8}, DstTy);
+        // })
+        // // G_SHUFFLE_VECTOR can have scalar sources (from 1 x s vectors) or scalar
+        // // destinations, we just want those lowered into G_BUILD_VECTOR or
+        // // G_EXTRACT_ELEMENT.
+        // .lowerIf([=](const LegalityQuery &Query) {
+        //   return !Query.Types[0].isVector() || !Query.Types[1].isVector();
+        // })
+        // .moreElementsIf(
+        //     [](const LegalityQuery &Query) {
+        //       return Query.Types[0].isVector() && Query.Types[1].isVector() &&
+        //              Query.Types[0].getNumElements() >
+        //                  Query.Types[1].getNumElements();
+        //     },
+        //     changeTo(1, 0))
+        // .moreElementsToNextPow2(0)
+        // .moreElementsIf(
+        //     [](const LegalityQuery &Query) {
+        //       return Query.Types[0].isVector() && Query.Types[1].isVector() &&
+        //              Query.Types[0].getNumElements() <
+        //                  Query.Types[1].getNumElements();
+        //     },
+        //     changeTo(0, 1))
+        // .widenScalarOrEltToNextPow2OrMinSize(0, 8)
+        // .clampNumElements(0, v8s8, v16s8)
+        // .clampNumElements(0, v4s16, v8s16)
+        // .clampNumElements(0, v4s32, v4s32)
+        // .clampNumElements(0, v2s64, v2s64)
+        // .scalarizeIf(scalarOrEltWiderThan(0, 64), 0)
+        // .bitcastIf(isPointerVector(0), [=](const LegalityQuery &Query) {
+        //   // Bitcast pointers vector to i64.
+        //   const LLT DstTy = Query.Types[0];
+        //   return std::pair(0, LLT::vector(DstTy.getElementCount(), 64));
+        // });
+      getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
+          .legalFor(ST.hasGPR32V(), {{s16, v2s16, s32}, {s8, v4s8, s32}})
+          .unsupportedIf([=](const LegalityQuery &Query) {
+            const LLT &EltTy = Query.Types[1].getElementType();
+            if (Query.Types[1].isScalableVector())
+              return false;
+            return Query.Types[0] != EltTy;
+          })
+          .minScalarOrElt(0, s8) // Worst case, we need at least s8.
+          .moreElementsToNextPow2(1)
+          .clampMaxNumElements(1, s16, 2)
+          .clampMaxNumElements(1, s8, 4);
+      getActionDefinitionsBuilder(G_BUILD_VECTOR)
+          .legalFor({{v4s8, s8}, {v2s16, s16}})
+          // .clampNumElements(0, v4s32, v4s32)
+          // .clampNumElements(0, v2s64, v2s64)
+          .minScalarOrElt(0, s8)
+          // .widenVectorEltsToVectorMinSize(0, 64)
+          .widenScalarOrEltToNextPow2(0)
+          .minScalarSameAs(1, 0);
   }
+  // getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor(XCVVecTys);
+  getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
+      .legalFor(ST.hasGPR32V(), {{v2s16, s16, s32}, {v4s8, s8, s32}})
+      // .legalIf(
+      //     typeInSet(0, {v16s8, v8s8, v8s16, v4s16, v4s32, v2s32, v2s64, v2p0}))
+      // .legalFor(HasSVE, {{nxv16s8, s32, s64},
+      //                    {nxv8s16, s32, s64},
+      //                    {nxv4s32, s32, s64},
+      //                    {nxv2s64, s64, s64}})
+      .moreElementsToNextPow2(0)
+      // .widenVectorEltsToVectorMinSize(0, 64)
+      // .clampNumElements(0, v8s8, v16s8)
+      // .clampNumElements(0, v4s16, v8s16)
+      // .clampNumElements(0, v2s32, v4s32)
+      .clampMaxNumElements(0, s8, 4)
+      .clampMaxNumElements(0, s16, 2);
 
   // Vector loads/stores.
   if (ST.hasVInstructions()) {
