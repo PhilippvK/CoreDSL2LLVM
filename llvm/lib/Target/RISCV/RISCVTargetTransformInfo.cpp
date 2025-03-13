@@ -686,6 +686,9 @@ InstructionCost RISCVTTIImpl::getScalarizationOverhead(
   InstructionCost Cost = BaseT::getScalarizationOverhead(
       Ty, DemandedElts, Insert, Extract, CostKind);
   std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(Ty);
+  if (ST->hasGPR32V()) {
+      return Cost + LT.first;
+  }
   if (Insert && !Extract && LT.first.isValid() && LT.second.isVector()) {
     if (Ty->getScalarSizeInBits() == 1) {
       auto *WideVecTy = cast<VectorType>(Ty->getWithNewBitWidth(8));
@@ -1748,8 +1751,8 @@ InstructionCost RISCVTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
                                               const Instruction *I) {
   EVT VT = TLI->getValueType(DL, Src, true);
   // Type legalization can't handle structs
-  // if (VT == MVT::Other || ST->hasGPR32V()) {
-  if (VT == MVT::Other) {
+  // if (VT == MVT::Other) {
+  if (VT == MVT::Other || ST->hasGPR32V()) {
     return BaseT::getMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
                                   CostKind, OpInfo, I);
   }
