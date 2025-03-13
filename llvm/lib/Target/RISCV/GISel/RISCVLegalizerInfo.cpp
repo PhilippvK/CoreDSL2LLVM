@@ -79,8 +79,11 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   const LLT s64 = LLT::scalar(64);
   const LLT v4s8 = LLT::fixed_vector(4, LLT::scalar(8));
   const LLT v2s16 = LLT::fixed_vector(2, LLT::scalar(16));
+  const LLT v4s1 = LLT::fixed_vector(4, LLT::scalar(1));
+  const LLT v2s1 = LLT::fixed_vector(2, LLT::scalar(1));
 
   auto XCVVecTys = {v4s8, v2s16};
+  auto XCVBoolVecTys = {v2s1, v4s1};
 
   const LLT nxv1s1 = LLT::scalable_vector(1, s1);
   const LLT nxv2s1 = LLT::scalable_vector(2, s1);
