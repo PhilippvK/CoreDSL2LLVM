@@ -8587,8 +8587,9 @@ LegalizerHelper::lowerAbsToCNeg(MachineInstr &MI) {
 LegalizerHelper::LegalizeResult
 LegalizerHelper::lowerVectorReduction(MachineInstr &MI) {
   Register SrcReg = MI.getOperand(1).getReg();
+  Register DstReg = MI.getOperand(0).getReg();
   LLT SrcTy = MRI.getType(SrcReg);
-  LLT DstTy = MRI.getType(SrcReg);
+  LLT DstTy = MRI.getType(DstReg);
 
   // The source could be a scalar if the IR type was <1 x sN>.
   if (SrcTy.isScalar()) {
