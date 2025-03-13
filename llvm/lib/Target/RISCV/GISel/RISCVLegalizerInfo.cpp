@@ -563,6 +563,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
 
   if (ST.hasStdExtZmmul()) {
     getActionDefinitionsBuilder(G_MUL)
+        .legalFor(ST.hasGPR32V(), XCVVecTys)
         .legalFor({sXLen})
         .widenScalarToNextPow2(0)
         .clampScalar(0, sXLen, sXLen);
@@ -576,6 +577,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
     getActionDefinitionsBuilder({G_SMULO, G_UMULO}).minScalar(0, sXLen).lower();
   } else {
     getActionDefinitionsBuilder(G_MUL)
+        .legalFor(ST.hasGPR32V(), XCVVecTys)
         .libcallFor({sXLen, sDoubleXLen})
         .widenScalarToNextPow2(0)
         .clampScalar(0, sXLen, sDoubleXLen);
