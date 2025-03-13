@@ -952,7 +952,7 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
   PatternArgs[Idx].Llt = Type;
   PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].Llt);
   PatternArgs[Idx].In = true;
-  int RegSize = XLen;
+  unsigned int RegSize = XLen;
   // int RegSize = Type.getSizeInBits();
   // if (RegSize != XLen) {
   //   // TODO: find better approach?
