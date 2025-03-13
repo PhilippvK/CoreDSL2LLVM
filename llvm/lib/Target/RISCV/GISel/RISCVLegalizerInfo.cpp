@@ -353,7 +353,11 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
         //   return std::pair(0, LLT::vector(DstTy.getElementCount(), 64));
         // });
       getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
-          .legalFor(ST.hasGPR32V(), {{s16, v2s16, s32}, {s8, v4s8, s32}})
+          // .legalFor(ST.hasGPR32V(), {{s16, v2s16, s32}, {s8, v4s8, s32}})
+          .legalIf([=](const LegalityQuery &Query) {
+            const LLT &VecTy = Query.Types[1];
+            return VecTy == v2s16 || VecTy == v4s8;
+          })
           .unsupportedIf([=](const LegalityQuery &Query) {
             const LLT &EltTy = Query.Types[1].getElementType();
             if (Query.Types[1].isScalableVector())
@@ -372,23 +376,28 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
           // .widenVectorEltsToVectorMinSize(0, 64)
           .widenScalarOrEltToNextPow2(0)
           .minScalarSameAs(1, 0);
+      // getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor(XCVVecTys);
+      getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
+          // .legalFor(ST.hasGPR32V(), {{v2s16, s16, s32}, {v4s8, s8, s32}})
+          // .legalFor({{v2s16, s16, s32}, {v4s8, s8, s32}})
+          .legalIf([=](const LegalityQuery &Query) {
+            const LLT &VecTy = Query.Types[0];
+            return VecTy == v2s16 || VecTy == v4s8;
+          })
+          // .legalIf(
+          //     typeInSet(0, {v16s8, v8s8, v8s16, v4s16, v4s32, v2s32, v2s64, v2p0}))
+          // .legalFor(HasSVE, {{nxv16s8, s32, s64},
+          //                    {nxv8s16, s32, s64},
+          //                    {nxv4s32, s32, s64},
+          //                    {nxv2s64, s64, s64}})
+          .moreElementsToNextPow2(0)
+          // .widenVectorEltsToVectorMinSize(0, 64)
+          // .clampNumElements(0, v8s8, v16s8)
+          // .clampNumElements(0, v4s16, v8s16)
+          // .clampNumElements(0, v2s32, v4s32)
+          .clampMaxNumElements(0, s8, 4)
+          .clampMaxNumElements(0, s16, 2);
   }
-  // getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor(XCVVecTys);
-  getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
-      .legalFor(ST.hasGPR32V(), {{v2s16, s16, s32}, {v4s8, s8, s32}})
-      // .legalIf(
-      //     typeInSet(0, {v16s8, v8s8, v8s16, v4s16, v4s32, v2s32, v2s64, v2p0}))
-      // .legalFor(HasSVE, {{nxv16s8, s32, s64},
-      //                    {nxv8s16, s32, s64},
-      //                    {nxv4s32, s32, s64},
-      //                    {nxv2s64, s64, s64}})
-      .moreElementsToNextPow2(0)
-      // .widenVectorEltsToVectorMinSize(0, 64)
-      // .clampNumElements(0, v8s8, v16s8)
-      // .clampNumElements(0, v4s16, v8s16)
-      // .clampNumElements(0, v2s32, v4s32)
-      .clampMaxNumElements(0, s8, 4)
-      .clampMaxNumElements(0, s16, 2);
 
   auto &ExtLoadActions =
       getActionDefinitionsBuilder({G_SEXTLOAD, G_ZEXTLOAD})
@@ -491,7 +500,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   else if (ST.hasVendorXCValu())
     MinMaxActions.legalFor({s32}).minScalar(0, sXLen);
   if (ST.hasGPR32V())
-    MinMaxActions.legalFor(ST.hasGPR32V(), XCVVecTys);
+    MinMaxActions.legalFor(XCVVecTys);
   MinMaxActions.lower();
 
   getActionDefinitionsBuilder(G_FRAME_INDEX).legalFor({p0});
