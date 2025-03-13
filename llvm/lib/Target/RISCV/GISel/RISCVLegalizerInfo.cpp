@@ -180,6 +180,9 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   ShiftActions.legalFor({{sXLen, sXLen}})
               .customFor(ST.is64Bit(), {{s32, s32}})
               .widenScalarToNextPow2(0)
+              .widenScalarOrEltToNextPow2OrMinSize(0, 8)
+              .widenScalarToNextPow2(1)
+              .widenScalarOrEltToNextPow2OrMinSize(1, 8)
               .clampScalar(1, sXLen, sXLen)
               .clampScalar(0, sXLen, sXLen);
 
@@ -364,7 +367,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
             LegalityPredicates::typeIs(1, s32),
             LegalityPredicates::typeInSet(0, XCVVecTys)));
 
-    ShiftActions.legalFor(XCVVecTys);
+    ShiftActions.legalFor(XCVVecTys).clampMaxNumElements(1, s16, 2).clampMaxNumElements(1, s8, 4).clampMaxNumElements(0, s16, 2).clampMaxNumElements(0, s8, 4).lower();
     getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
         .lower();
         // .legalIf([=](const LegalityQuery &Query) {
