@@ -490,6 +490,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
     MinMaxActions.legalFor({sXLen}).minScalar(0, sXLen);
   else if (ST.hasVendorXCValu())
     MinMaxActions.legalFor({s32}).minScalar(0, sXLen);
+  if (ST.hasGPR32V())
+    MinMaxActions.legalFor(ST.hasGPR32V(), XCVVecTys);
   MinMaxActions.lower();
 
   getActionDefinitionsBuilder(G_FRAME_INDEX).legalFor({p0});
