@@ -299,6 +299,19 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
     ShiftActions.legalFor(XCVVecTys).clampMaxNumElements(1, s16, 2).clampMaxNumElements(1, s8, 4).clampMaxNumElements(0, s16, 2).clampMaxNumElements(0, s8, 4).lower();
     getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
         .lower();
+    getActionDefinitionsBuilder(G_VECREDUCE_ADD)
+        // .legalFor({{s8, v16s8},
+        //            {s8, v8s8},
+        //            {s16, v8s16},
+        //            {s16, v4s16},
+        //            {s32, v4s32},
+        //            {s32, v2s32},
+        //            {s64, v2s64}})
+        // .clampMaxNumElements(1, s64, 2)
+        // .clampMaxNumElements(1, s32, 4)
+        // .clampMaxNumElements(1, s16, 8)
+        // .clampMaxNumElements(1, s8, 16)
+        .lower();
         // .legalIf([=](const LegalityQuery &Query) {
         //   const LLT &DstTy = Query.Types[0];
         //   const LLT &SrcTy = Query.Types[1];
