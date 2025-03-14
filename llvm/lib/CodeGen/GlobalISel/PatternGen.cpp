@@ -144,7 +144,8 @@ enum PatternErrorT {
   FORMAT_LOAD,
   FORMAT_IMM,
   FORMAT,
-  MULTIPLE_STORES
+  MULTIPLE_STORES,
+  UNUSED_OPERANDS
 };
 struct PatternError {
   PatternErrorT Type;
@@ -165,7 +166,8 @@ llvm::Statistic *ErrorStats[] = {nullptr,
                                  &PatternGenNumErrorFormatLoad,
                                  &PatternGenNumErrorFormatImm,
                                  &PatternGenNumErrorFormat,
-                                 &PatternGenNumErrorMultipleStores};
+                                 &PatternGenNumErrorMultipleStores,
+                                 &PatternGenNumErrorUnusedOperand};
 
 static const std::unordered_map<unsigned, std::string> CmpStr = {
     {CmpInst::Predicate::ICMP_EQ, "SETEQ"},
