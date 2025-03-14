@@ -13,6 +13,9 @@ std::string EncodingToTablgen(CDSLInstr const& instr)
     uint8_t size = instr.size;
     std::string base = (size == 48 ? "RVInst48" : "RVInst");
 
+    uint8_t size = instr.size;
+    std::string base = (size == 48 ? "RVInst48" : "RVInst");
+
     s << "class RVInst_" << instr.name << "<dag outs, dag ins>"
       << " : " << base << "<outs, ins, \"" << opcodeString << "\", \"" << instr.argString << "\", [], InstFormatOther> {\n";
 
