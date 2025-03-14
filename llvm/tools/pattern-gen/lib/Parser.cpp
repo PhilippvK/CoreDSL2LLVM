@@ -1281,10 +1281,11 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
     case IntLiteral: {
       auto litT = ts.Pop();
       uint8_t len = litT.literal.bitLen;
+      uint32_t val = litT.literal.value;
       offset -= len;
       // Create field with 0xFF placeholder index
       instr.frags.push_back(
-          CDSLInstr::FieldFrag{0xFF, len, (uint8_t)offset, (uint8_t)offset});
+          CDSLInstr::FieldFrag{0xFF, len, (uint8_t)offset, (uint8_t)offset, val});
       break;
     }
     case Identifier: {
@@ -1332,7 +1333,8 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
       instr.frags.push_back((CDSLInstr::FieldFrag){.idx = (uint8_t)matchIdx,
                                                    .len = (uint8_t)len,
                                                    .dstOffset = (uint8_t)offset,
-                                                   .srcOffset = (uint8_t)lo});
+                                                   .srcOffset = (uint8_t)lo,
+                                                   .val = 0});
 
       break;
     }
@@ -1371,8 +1373,10 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
 
   // Reference newly created constant field in all constant frags
   for (auto &frag : instr.frags)
-    if (frag.idx == 255)
+    if (frag.idx == 255) {
       frag.idx = constIdx;
+      instr.fields[constIdx].constV |= (frag.val << frag.srcOffset);
+    }
 }
 
 void ParseArguments(TokenStream &ts, CDSLInstr &instr) {
