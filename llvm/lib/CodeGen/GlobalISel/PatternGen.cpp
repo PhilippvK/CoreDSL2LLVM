@@ -1370,6 +1370,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   std::string OutsString;
   std::string InsString;
   for (size_t I = 0; I < CurInstr->fields.size() - 1; I++) {
+
     // handle unused operands
     if (!PatternArgs[I].In && !PatternArgs[I].Out) {
         llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
