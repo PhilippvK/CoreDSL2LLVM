@@ -577,7 +577,7 @@ struct UnopNode : public PatternNode {
     std::string TypeStr = lltToString(Type);
 
     // ignore bitcast ops for now
-    if (Op == TargetOpcode::G_BITCAST)
+    if ((Op == TargetOpcode::G_BITCAST) || (Op == TargetOpcode::G_CONSTANT_FOLD_BARRIER))
       return Operand->patternString();
 
     return "(" + TypeStr + " (" + std::string(UnopStr.at(Op)) + " " +
@@ -585,7 +585,7 @@ struct UnopNode : public PatternNode {
   }
 
   LLT getRegisterTy(int OperandId) const override {
-    if (OperandId == -1 && Op != TargetOpcode::G_BITCAST)
+    if (OperandId == -1 && Op != TargetOpcode::G_BITCAST && Op != TargetOpcode::G_CONSTANT_FOLD_BARRIER)
       return Type;
     return Operand->getRegisterTy(OperandId);
   }
@@ -1059,6 +1059,7 @@ static PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
 
     return std::make_pair(SUCCESS, std::move(Node));
   }
+  case TargetOpcode::G_CONSTANT_FOLD_BARRIER:
   case TargetOpcode::G_ANYEXT:
   case TargetOpcode::G_SEXT:
   case TargetOpcode::G_ZEXT:
