@@ -27,6 +27,7 @@
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/IR/Type.h"
 
 using namespace llvm;
@@ -766,6 +767,8 @@ bool RISCVLegalizerInfo::legalizeIntrinsic(LegalizerHelper &Helper,
     MI.eraseFromParent();
     return true;
   }
+  case Intrinsic::riscv_pg_branch:
+    return true;
   }
 }
 
