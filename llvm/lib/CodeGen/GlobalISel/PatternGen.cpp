@@ -1748,6 +1748,7 @@ private:
       PromoteToOperandMatcher();
       if (state >= InsnMatcher)
         return;
+      NumCheckSafeToMove++;
       Output << "auto &_" << (CurIdx) << " = (**(_" << Idx
              << ".addPredicate<InstructionOperandMatcher>(RM, "
                 "\"\"))).getInsnMatcher();\n";
@@ -1937,7 +1938,13 @@ private:
     case PatternNode::PN_Load: {
       auto &AsLoad = llvm::cast<LoadNode>(*Node);
       PromoteToInsnMatcher();
-      CheckOpcode("G_LOAD");
+      if (AsLoad.Size == (int)XLen)
+        CheckOpcode("G_LOAD");
+      else if (AsLoad.Sext)
+        CheckOpcode("G_SEXTLOAD");
+      else
+        CheckOpcode("G_ZEXTLOAD");
+
       AddPredicate("AtomicOrderingMMOPredicateMatcher", {"\"NotAtomic\""});
       AddPredicate("MemorySizePredicateMatcher",
                    {"0", std::to_string(AsLoad.Size / 8)});
