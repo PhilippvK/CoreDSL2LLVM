@@ -1490,8 +1490,11 @@ bool RISCVInstrInfo::optimizeCondBranch(MachineInstr &MI) const {
   const MachineOperand &RHS = MI.getOperand(1);
   MachineBasicBlock *TBB = MI.getOperand(2).getMBB();
 
+  // RISCVCC::CondCode CC = static_cast<RISCVCC::CondCode>(Cond[0].getImm());
   RISCVCC::CondCode CC = getCondFromBranchOpc(MI.getOpcode());
-  assert(CC != RISCVCC::COND_INVALID);
+  // assert(CC != RISCVCC::COND_INVALID);
+  if (CC == RISCVCC::COND_INVALID)
+    return false;
 
   // Canonicalize conditional branches which can be constant folded into
   // beqz or bnez.  We can't modify the CFG here.
@@ -1605,7 +1608,8 @@ bool RISCVInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
   // PseudoBR.
   switch (BranchOp) {
   default:
-    llvm_unreachable("Unexpected opcode!");
+    // Assume SEAL5 branches are all 13 bits.
+    //llvm_unreachable("Unexpected opcode!");
   case RISCV::NDS_BBC:
   case RISCV::NDS_BBS:
   case RISCV::NDS_BEQC:
