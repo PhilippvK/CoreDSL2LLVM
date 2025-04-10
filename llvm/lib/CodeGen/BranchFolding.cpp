@@ -1452,9 +1452,14 @@ ReoptimizeBlock:
     // If the prior block branches somewhere else on the condition and here if
     // the condition is false, remove the uncond second branch.
     if (PriorFBB == MBB) {
-      DebugLoc Dl = PrevBB.findBranchDebugLoc();
-      TII->removeBranch(PrevBB);
-      TII->insertBranch(PrevBB, PriorTBB, nullptr, PriorCond, Dl);
+      // DebugLoc Dl = PrevBB.findBranchDebugLoc();
+      // TII->removeBranch(PrevBB);
+      // TII->insertBranch(PrevBB, PriorTBB, nullptr, PriorCond, dl);
+      auto I = PrevBB.end();
+      I--;
+      assert(I->isUnconditionalBranch());
+      I->eraseFromParent();
+
       MadeChange = true;
       ++NumBranchOpts;
       goto ReoptimizeBlock;

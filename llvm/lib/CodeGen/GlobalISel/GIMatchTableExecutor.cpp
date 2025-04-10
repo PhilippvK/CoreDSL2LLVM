@@ -118,13 +118,13 @@ bool GIMatchTableExecutor::isSafeToMove(MachineRegisterInfo &MRI,
   llvm::SmallPtrSet<MachineInstr *, 8> Span;
   for (auto *It = MI.getNextNode(); It != nullptr && It != &IntoMI;
        It = It->getNextNode()) {
-    It->isSafeToMove(nullptr, SawStore);
+    It->isSafeToMove(SawStore);
 
     if (llvm::find(OthersToMerge, It) == OthersToMerge.end())
         Span.insert(It);
   }
 
-  if (!MI.isSafeToMove(nullptr, SawStore))
+  if (!MI.isSafeToMove(SawStore))
     return false;
 
   for (const auto &Def : MI.defs()) {

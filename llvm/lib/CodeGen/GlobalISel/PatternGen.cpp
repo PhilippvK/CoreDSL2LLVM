@@ -16,6 +16,7 @@
 #include "llvm/Analysis/LazyBlockFrequencyInfo.h"
 #include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/CodeGen/GlobalISel/GISelKnownBits.h"
+#include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
@@ -33,6 +34,8 @@
 #include "llvm/CodeGenTypes/LowLevelType.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Casting.h"
@@ -97,6 +100,7 @@ static CDSLInstr const *CurInstr = nullptr;
 static SmallVector<PatternArg, 8> PatternArgs;
 static bool MayLoad = 0;
 static bool MayStore = 0;
+static bool IsBranch = 0;
 
 static uint64_t XLen;
 static std::string RegT;
@@ -181,6 +185,19 @@ static const std::unordered_map<unsigned, std::string> CmpStr = {
     {CmpInst::Predicate::ICMP_UGE, "SETUGE"},
 };
 
+static const std::unordered_map<unsigned, std::string> CmpStrGI = {
+    {CmpInst::Predicate::ICMP_EQ, "ICMP_EQ"},
+    {CmpInst::Predicate::ICMP_NE, "ICMP_NE"},
+    {CmpInst::Predicate::ICMP_SLT, "ICMP_SLT"},
+    {CmpInst::Predicate::ICMP_SLE, "ICMP_SLE"},
+    {CmpInst::Predicate::ICMP_SGT, "ICMP_SGT"},
+    {CmpInst::Predicate::ICMP_SGE, "ICMP_SGE"},
+    {CmpInst::Predicate::ICMP_ULT, "ICMP_ULT"},
+    {CmpInst::Predicate::ICMP_ULE, "ICMP_ULE"},
+    {CmpInst::Predicate::ICMP_UGT, "ICMP_UGT"},
+    {CmpInst::Predicate::ICMP_UGE, "ICMP_UGE"},
+};
+
 std::string lltToString(LLT Llt) {
   if (Llt.isFixedVector())
     return "v" + std::to_string(Llt.getElementCount().getFixedValue()) +
@@ -229,6 +246,7 @@ struct PatternNode {
     PN_Fork,
     PN_ForkOther,
     PN_Store,
+    PN_Branch,
     PN_Root
   };
 
@@ -524,13 +542,8 @@ static const std::unordered_map<int, std::string> BinopStr = {
     {TargetOpcode::G_UMIN, "umin"},
     {TargetOpcode::G_ROTR, "rotr"},
     {TargetOpcode::G_ROTL, "rotl"},
+    {TargetOpcode::G_ICMP, "icmp"},
     {TargetOpcode::G_EXTRACT_VECTOR_ELT, "vector_extract"}};
-
-static const llvm::DenseSet<int> CommOps = {
-    TargetOpcode::G_ADD,   TargetOpcode::G_MUL,  TargetOpcode::G_UMULH,
-    TargetOpcode::G_SMULH, TargetOpcode::G_AND,  TargetOpcode::G_OR,
-    TargetOpcode::G_XOR,   TargetOpcode::G_UMAX, TargetOpcode::G_SMIN,
-    TargetOpcode::G_UMIN}; // TODO: extend list
 
 struct BinopNode : public PatternNode {
   int Op;
@@ -617,7 +630,7 @@ struct CompareNode : public BinopNode {
   CompareNode(LLT Type, CmpInst::Predicate Cond,
               std::unique_ptr<PatternNode> Left,
               std::unique_ptr<PatternNode> Right, bool Commutable = false)
-      : BinopNode(Type, ISD::SETCC, std::move(Left), std::move(Right),
+      : BinopNode(Type, TargetOpcode::G_ICMP, std::move(Left), std::move(Right),
                   Commutable),
         Cond(Cond) {}
 
@@ -796,7 +809,8 @@ struct ForkNode : public PatternNode {
   }
 
   std::string patternString() override {
-    assert(0 && "Fork node does not support patternString()");
+    // assert(0 && "Fork node does not support patternString()");
+    return "(fork" + Value->patternString() + ")";
   }
 
   static bool classof(const PatternNode *p) { return p->getKind() == PN_Fork; }
@@ -812,7 +826,8 @@ struct ForkOtherNode : public PatternNode {
       : PatternNode(PN_ForkOther, Fork->Type), Fork(Fork) {}
 
   std::string patternString() override {
-    assert(0 && "Fork node does not support patternString()");
+    // assert(0 && "Fork node does not support patternString()");
+    return "(forkother " + Fork->patternString() + ")";
   }
 
   static bool classof(const PatternNode *p) {
@@ -854,6 +869,30 @@ struct StoreNode : public PatternNode {
   }
 };
 
+struct BranchNode : public PatternNode {
+  std::unique_ptr<PatternNode> Value;
+  // std::unique_ptr<PatternNode> Addr;
+
+  BranchNode(LLT Type, std::unique_ptr<PatternNode> Value
+             /*std::unique_ptr<PatternNode> Addr*/)
+      : PatternNode(PN_Branch, Type), Value(std::move(Value))
+  /*Addr(std::move(Addr))*/ {
+    this->Value->Parent = this;
+    // this->Addr->Parent = this;
+  }
+
+  std::string patternString() override {
+    return "(branch " + Value->patternString() + ")";
+  }
+
+  static bool classof(const PatternNode *p) {
+    return p->getKind() == PN_Branch;
+  }
+  std::vector<std::unique_ptr<PatternNode> *> getOperands() override {
+    return {&Value};
+  }
+};
+
 struct RootNode : public PatternNode {
   std::vector<std::pair<int, std::unique_ptr<PatternNode>>> Stores;
 
@@ -864,9 +903,13 @@ struct RootNode : public PatternNode {
   }
 
   std::string patternString() override {
-    assert(Stores.size() == 1 &&
-           "patternString() only supports single-destination instructions.");
-    return Stores[0].second->patternString();
+    // assert(Stores.size() == 1 &&
+    //        "patternString() only supports single-destination instructions.");
+    std::string Str = "(";
+    for (auto &Store : Stores)
+      Str += Store.second->patternString() + ", ";
+    Str += ")";
+    return Str;
   }
   static bool classof(const PatternNode *p) { return p->getKind() == PN_Root; }
 };
@@ -1362,6 +1405,22 @@ struct PatternExtractor {
 
       return std::make_pair(SUCCESS, std::move(Node));
     }
+      // case TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS: {
+      //   auto &asIntr = llvm::cast<GIntrinsic>(Cur);
+      //   switch (asIntr.getIntrinsicID()) {
+      //   case llvm::Intrinsic::riscv_pg_branch: {
+      //     auto *Cond = MRI.getOneDef(asIntr.getOperand(2).getReg());
+      //     auto [CondErr, CondV] = traverse(MRI, *Cond->getParent());
+      //     if (CondErr)
+      //       return PError(CondErr);
+      //     return PPattern(std::make_unique<BranchNode>(LLT::scalar(XLen),
+      //     std::move(CondV)));
+      //   }
+      //   default:
+      //     llvm_unreachable("unknown intrinsic id");
+      //   }
+      //   break;
+      // }
     }
 
     return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
@@ -1486,7 +1545,7 @@ struct PatternExtractor {
 
     std::vector<std::pair<int, std::unique_ptr<PatternNode>>> Stores;
 
-    for (; Instrs != InstrsEnd; Instrs++)
+    for (; Instrs != InstrsEnd; Instrs++) {
       if (Instrs->getOpcode() == TargetOpcode::G_STORE) {
         int OpIdx;
         auto Result = traverseStore(MRI, *Instrs, OpIdx);
@@ -1496,6 +1555,35 @@ struct PatternExtractor {
 
         Stores.push_back(std::make_pair(OpIdx, std::move(Result.second)));
       }
+      if (Instrs->getOpcode() == TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS) {
+        auto &asIntr = llvm::cast<GIntrinsic>(*Instrs);
+        switch (asIntr.getIntrinsicID()) {
+        case llvm::Intrinsic::riscv_pg_branch: {
+          auto *Cond = MRI.getOneDef(asIntr.getOperand(2).getReg());
+          auto [CondErr, CondV] = traverse(MRI, *Cond->getParent());
+          if (CondErr)
+            return PError(CondErr);
+          IsBranch = 1;
+          // insert an icmp if there isn't one already
+          if (!(llvm::isa<BinopNode>(CondV) &&
+                llvm::cast<BinopNode>(*CondV).Op == TargetOpcode::G_ICMP)) {
+            CondV = std::make_unique<CompareNode>(
+                LLT::scalar(XLen), CmpInst::ICMP_NE,
+                std::make_unique<ConstantNode>(LLT::scalar(XLen), 0),
+                std::move(CondV), true);
+          }
+
+          Stores.push_back(
+              std::make_pair(0, std::make_unique<BranchNode>(
+                                    LLT::scalar(XLen), std::move(CondV))));
+          break;
+        }
+        default:
+          llvm_unreachable("unknown intrinsic id");
+        }
+        break;
+      }
+    }
 
     return PPattern(std::make_unique<RootNode>(std::move(Stores)));
   }
@@ -1542,6 +1630,8 @@ public:
     assert(Root->Stores.size() >= 1);
     auto &[OpIdx, Store] = Root->Stores[0];
 
+    // If the root node is a PTR_ADD it gets converted to a regular add by a
+    // pre-select hook. Not the case for non-root nodes.
     bool PtrAddFixup = false;
     if (auto *AsBinop = llvm::dyn_cast<BinopNode>(Store.get());
         AsBinop && AsBinop->Op == TargetOpcode::G_PTR_ADD) {
@@ -1549,8 +1639,9 @@ public:
       PtrAddFixup = true;
     }
 
-    BindOutputs.push_back(
-        BindOutput{CurInstr->fields[OpIdx].ident, 0, 0, OpIdx});
+    if (!llvm::isa<BranchNode>(Store))
+      BindOutputs.push_back(
+          BindOutput{CurInstr->fields[OpIdx].ident, 0, 0, OpIdx});
     process_impl(Store.get(), 0, InsnMatcher);
 
     if (PtrAddFixup)
@@ -1609,8 +1700,8 @@ public:
 
     friend std::ostream &operator<<(std::ostream &os, const OperandIdx &OpIdx) {
       if (OpIdx.IsRange)
-        os << "(1+(R_" << OpIdx.RangeIdx << "+" << OpIdx.OpIdx << ")%"
-           << OpIdx.RangeLen << ")";
+        os << "(" << OpIdx.RangeOffs << "+(R_" << OpIdx.RangeIdx << "+"
+           << OpIdx.OpIdx << ")%" << OpIdx.RangeLen << ")";
       else
         os << OpIdx.OpIdx;
       return os;
@@ -1624,9 +1715,11 @@ private:
 
     auto AddPredicate = [&](std::string Predicate, ArrayRef<StringRef> Args) {
       Output << "_" << Idx << ".addPredicate<" << Predicate << ">(";
-      for (auto &Arg : Args)
-        Output << Arg.str() << ", ";
-      Output.seekp(-2, std::ios_base::end);
+      if (Args.size() != 0) {
+        for (auto &Arg : Args)
+          Output << Arg.str() << ", ";
+        Output.seekp(-2, std::ios_base::end);
+      }
       Output << ");\n";
     };
 
@@ -1725,6 +1818,8 @@ private:
         case PatternNode::PN_Load:
           CheckOpcode("G_LOAD");
           break;
+        case PatternNode::PN_Cast:
+          break;
         default:
           abort();
         }
@@ -1761,16 +1856,27 @@ private:
       assert((unsigned)AsBinop.Op < NumFixedInstructions);
       CheckOpcode(FixedInstrs[AsBinop.Op]);
 
+      int OpsBase = 1;
+      if (AsBinop.Op == TargetOpcode::G_ICMP) {
+        AddPredicate(
+            "CmpPredicateOperandMatcher",
+            {"1", "\"" + CmpStrGI.at(static_cast<CompareNode &>(AsBinop).Cond) +
+                      "\""});
+        OpsBase = 2;
+      }
+
       size_t RangesLen = Ranges.size();
       if (AsBinop.Commutable)
         Ranges.push_back(2);
 
       process_impl(AsBinop.Left.get(), Idx, None,
-                   AsBinop.Commutable ? OperandIdx::ranged(RangesLen, 2, 1, 0)
-                                      : OperandIdx::fixed(1));
+                   AsBinop.Commutable
+                       ? OperandIdx::ranged(RangesLen, 2, OpsBase, 0)
+                       : OperandIdx::fixed(OpsBase + 0));
       process_impl(AsBinop.Right.get(), Idx, None,
-                   AsBinop.Commutable ? OperandIdx::ranged(RangesLen, 2, 1, 1)
-                                      : OperandIdx::fixed(2));
+                   AsBinop.Commutable
+                       ? OperandIdx::ranged(RangesLen, 2, OpsBase, 1)
+                       : OperandIdx::fixed(OpsBase + 1));
       break;
     }
     case PatternNode::PN_Register: {
@@ -1843,6 +1949,29 @@ private:
     case PatternNode::PN_Cast: {
       auto &AsCast = llvm::cast<CastNode>(*Node);
       process_impl(AsCast.Value.get(), Idx, state, OpIdx);
+      break;
+    }
+
+    case PatternNode::PN_Branch: {
+      auto &AsBranch = llvm::cast<BranchNode>(*Node);
+      CheckOpcode("G_BRCOND");
+
+      auto *It = llvm::find_if(CurInstr->fields, [](auto &F) {
+        return (int)F.type & (int)CDSLInstr::BRANCH_OFFS;
+      });
+      if (It == CurInstr->fields.end()) {
+        Error = "Branch instruction but no branch offset immediate defined.";
+        break;
+      }
+
+      auto IdxLast = Idx;
+      state = None;
+      OpIdx = OperandIdx::fixed(1);
+      BindAndPromoteToOperandMatcher(It->ident);
+      AddPredicate("MBBOperandMatcher", {});
+
+      Idx = IdxLast;
+      process_impl(AsBranch.Value.get(), Idx, None, OperandIdx::fixed(0));
       break;
     }
 
@@ -2019,6 +2148,7 @@ void GenGISelTable(PatternNode *Root, std::ostream &Out) {
   int Success = 0;
   do {
     GISelTableBackend Backend{};
+    llvm::outs() << "Permute: " << Root->patternString() << "\n";
     Backend.process(llvm::cast<RootNode>(Root));
     Out << Backend.getOutput().str();
     if (auto Err = Backend.getError()) {
@@ -2042,6 +2172,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   RegT = PatternGenArgs::Args.Is64Bit ? "i64" : "i32";
   MayLoad = 0;
   MayStore = 0;
+  IsBranch = 0;
 
   MF.dump();
 
@@ -2061,6 +2192,19 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   // about parameters that may be found during pattern gen.
   PatternArgs.clear();
   PatternArgs.append(CurInstr->fields.size(), PatternArg());
+
+  for (size_t I = 0; I < CurInstr->fields.size(); I++)
+    if (CurInstr->fields[I].type & CDSLInstr::BRANCH_OFFS) {
+      PatternArgs[I].In = true;
+      PatternArgs[I].ArgTypeStr = "simm13_lsb0";
+
+      // very last argument is constant.
+      if (I != CurInstr->fields.size() - 2) {
+        llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
+                     << "Branch offset immediate is not last operand." << '\n';
+        return true;
+      }
+    }
 
   PatternExtractor Extractor{};
 
@@ -2134,8 +2278,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
     OutStream << "let hasSideEffects = 0, mayLoad = " +
                      std::to_string((int)MayLoad) +
                      ", mayStore = " + std::to_string((int)MayStore) +
-                     ", "
-                     "isCodeGenOnly = 1";
+                     ", isBranch = " + std::to_string((int)IsBranch) +
+                     ", isTerminator = " + std::to_string((int)IsBranch) +
+                     ", isCodeGenOnly = 1";
 
     OutStream << ", Constraints = \"";
     {
