@@ -842,6 +842,7 @@ bool RISCVLegalizerInfo::legalizeIntrinsic(LegalizerHelper &Helper,
   case Intrinsic::riscv_masked_atomicrmw_add:
   case Intrinsic::riscv_masked_atomicrmw_sub:
   case Intrinsic::riscv_masked_cmpxchg:
+  case Intrinsic::riscv_pg_branch:
     return true;
   }
 }

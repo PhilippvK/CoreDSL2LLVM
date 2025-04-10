@@ -18,6 +18,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/AllocatorBase.h"
@@ -1175,6 +1176,19 @@ void ParseStatement(TokenStream &ts, llvm::Function *func,
   case CBrOpen:
     ParseScope(ts, func, build);
     break;
+  case Identifier:
+    if (ts.Peek().ident.str == "branch") {
+      ts.Pop();
+      pop_cur(ts, RBrOpen);
+      auto val = ParseExpression(ts, func, build);
+      pop_cur(ts, RBrClose);
+      auto *xlenType = llvm::Type::getIntNTy(build.getContext(), xlen);
+      build.CreateIntrinsic(xlenType, llvm::Intrinsic::riscv_pg_branch,
+                            {val.ll});
+      pop_cur(ts, Semicolon);
+      break;
+    }
+    [[fallthrough]];
   default: {
     ParseExpression(ts, func, build);
     pop_cur(ts, Semicolon);
@@ -1223,27 +1237,10 @@ struct AttrValue {
 
 using AttrMap = llvm::StringMap<AttrValue>;
 AttrMap ParseAttributes(TokenStream &ts) {
-  // using FieldType = CDSLInstr::FieldType;
-
-  // Sign bit specifies whether to OR or AND the mask, so just do
-  // ~MY_FIELD to unset myField.
-  // const static llvm::DenseMap<llvm::StringRef, std::pair<uint, bool>>
-  //     attrMap = {{"is_unsigned", {~FieldType::SIGNED_REG, 0}},
-  //                {"is_signed", {FieldType::SIGNED_REG, 0}},
-  //                {"is_imm", {FieldType::IMM, 0}},
-  //                {"is_reg", {FieldType::REG, 0}},
-  //                {"in", {FieldType::IN, 0}},
-  //                {"out", {FieldType::OUT, 0}},
-  //                {"inout", {(FieldType::IN | FieldType::OUT), 0}},
-  //                {"is_32_bit", {FieldType::IS_32_BIT, 0}}};
-
-  // uint acc = 0;
   AttrMap attrs;
   while (ts.Peek().type == ABrOpen) {
     for (int i = 0; i < 2; i++)
       pop_cur(ts, ABrOpen);
-
-    // bool allowArg = true;
 
     auto ident = pop_cur(ts, Identifier).ident;
     std::string name = std::string{ident.str};
@@ -1267,24 +1264,6 @@ AttrMap ParseAttributes(TokenStream &ts) {
       }
     }
     attrs[name] = std::move(value);
-
-    // auto iter = attrMap.find(attrName);
-    // if (iter != attrMap.end()) {
-    //   uint op = iter->getSecond().first;
-    //   allowArg = iter->getSecond().second;
-    //   if (op & (1UL << (std::numeric_limits<uint>::digits - 1)))
-    //     acc &= op;
-    //   else
-    //     acc |= op;
-    // }
-
-    // if (pop_cur_if(ts, Assignment)) {
-    //   if (!allowArg)
-    //     error("attribute does not take an argument", ts);
-    //   if (!llvm::find(std::array{Identifier, IntLiteral, StringLiteral},
-    //                   ts.Pop().type))
-    //     error("invalid attribute", ts);
-    // }
 
     for (int i = 0; i < 2; i++)
       pop_cur(ts, ABrClose);
@@ -1319,6 +1298,8 @@ void ApplyOperandAttributes(const AttrMap &attrs, CDSLInstr::Field &op,
       type &= (~FT::SIGNED_REG);
     } else if (name == "is_32_bit") {
       type |= FT::IS_32_BIT;
+    } else if (name == "is_branch_offs") {
+      type |= (FT::IMM | FT::BRANCH_OFFS);
     } else if (name == "llvm_type") {
       if (val.kind != AttrValue::String)
         error("llvm_type must be a string", ts);
@@ -1398,6 +1379,7 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
 
   uint offset = 48;
   uint preDefIdx = instr.fields.size();
+  uint64_t constValue = 0;
 
   while (1) {
     switch (ts.Peek().type) {
@@ -1409,6 +1391,8 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
       // Create field with 0xFF placeholder index
       instr.frags.push_back(CDSLInstr::FieldFrag{0xFF, len, (uint8_t)offset,
                                                  (uint8_t)offset, val});
+
+      constValue |= (litT.literal.value << offset);
       break;
     }
     case Identifier: {
@@ -1488,8 +1472,9 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
   // Rather than splitting up the constant bits of the instruction into multiple
   // fields, we use one trailing constant field of size 32/48. FieldFragments
   // can index into relevant sections of this single field.
-  instr.fields.push_back(CDSLInstr::Field{
-      .len = size, .constV = 0, .type = CDSLInstr::FieldType::CONST});
+  instr.fields.push_back(CDSLInstr::Field{.len = size,
+                                          .constV = (uint32_t)constValue,
+                                          .type = CDSLInstr::FieldType::CONST});
   if (instr.fields.size() > 255)
     error("too many instruction fields", ts);
   uint8_t constIdx = instr.fields.size() - 1;
