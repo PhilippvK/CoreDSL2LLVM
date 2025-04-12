@@ -26,7 +26,8 @@ struct CDSLInstr {
     IN = 32,
     OUT = 64,
     IS_32_BIT = 128,
-    BRANCH_OFFS = 256
+    BRANCH_OFFS = 256,
+    UNROLL_IMM = 512,
   };
 
   struct Field {
@@ -46,6 +47,18 @@ struct CDSLInstr {
 
   llvm::SmallVector<Field, 4> fields;
   llvm::SmallVector<FieldFrag, 8> frags;
+
+  CDSLInstr() = default;
+  CDSLInstr(const CDSLInstr &) = default;
+  CDSLInstr(CDSLInstr &&) = default;
+
+  CDSLInstr(std::string name) : name(name) {
+    std::string mnemonic = name;
+    std::replace(mnemonic.begin(), mnemonic.end(), '_', '.');
+    std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    this->mnemonic = mnemonic;
+  }
 };
 
 std::string EncodingToTablgen(CDSLInstr const &instr);

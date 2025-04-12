@@ -94,6 +94,16 @@ let TargetPrefix = "riscv" in {
   def int_riscv_xperm8  : RISCVBitManipGPRGPRIntrinsics;
 } // TargetPrefix = "riscv"
 
+
+let TargetPrefix = "riscv" in {
+  class PatternGenIntrinsic
+    : DefaultAttrsIntrinsic<[llvm_any_ty],
+                            [LLVMMatchType<0>],
+                            [IntrNoMem, IntrHasSideEffects]>;
+
+  def int_riscv_pg_branch : PatternGenIntrinsic;
+}
+
 //===----------------------------------------------------------------------===//
 // May-Be-Operations
 
@@ -636,7 +646,7 @@ let TargetPrefix = "riscv" in {
   class RISCVClassifyMasked
         : DefaultAttrsIntrinsic<[LLVMVectorOfBitcastsToInt<0>],
                     [LLVMVectorOfBitcastsToInt<0>, llvm_anyvector_ty,
-                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>, 
+                     LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                      llvm_anyint_ty, LLVMMatchType<1>],
                     [IntrNoMem, ImmArg<ArgIndex<4>>]>, RISCVVIntrinsic {
     let VLOperand = 3;
