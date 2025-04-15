@@ -886,7 +886,8 @@ struct ForkNode : public PatternNode {
   }
 
   std::string patternString() override {
-    // assert(0 && "Fork node does not support patternString()");
+    assert(PatternGenArgs::Args.GISelTableBackend &&
+           "Fork node does not support TableGen patterns");
     return "(fork" + Value->patternString() + ")";
   }
 
@@ -903,8 +904,9 @@ struct ForkOtherNode : public PatternNode {
       : PatternNode(PN_ForkOther, Fork->Type), Fork(Fork) {}
 
   std::string patternString() override {
-    // assert(0 && "Fork node does not support patternString()");
-    return "(forkother " + Fork->patternString() + ")";
+    assert(PatternGenArgs::Args.GISelTableBackend &&
+           "Fork other node does not support TableGen patterns");
+    return "(forkother " + Fork->Value->patternString() + ")";
   }
 
   static bool classof(const PatternNode *p) {
@@ -960,6 +962,8 @@ struct BranchNode : public PatternNode {
   }
 
   std::string patternString() override {
+    assert(PatternGenArgs::Args.GISelTableBackend &&
+           "Branch node does not support TableGen patterns");
     return "(branch " + Value->patternString() + ")";
   }
 
@@ -981,13 +985,16 @@ struct RootNode : public PatternNode {
   }
 
   std::string patternString() override {
-    // assert(Stores.size() == 1 &&
-    //        "patternString() only supports single-destination instructions.");
-    std::string Str = "(";
-    for (auto &Store : Stores)
-      Str += Store.second->patternString() + " | ";
-    Str += ")";
-    return Str;
+    if (PatternGenArgs::Args.GISelTableBackend) {
+      std::string Str = "(";
+      for (auto &Store : Stores)
+        Str += Store.second->patternString() + " | ";
+      Str += ")";
+      return Str;
+    }
+    assert(Stores.size() == 1 &&
+           "Table gen patterns only support single store!");
+    return Stores.front().second->patternString();
   }
   static bool classof(const PatternNode *p) { return p->getKind() == PN_Root; }
 };
@@ -1378,10 +1385,15 @@ struct PatternExtractor {
         return std::make_pair(PatternError(FORMAT_LOAD, &Cur), nullptr);
       auto *AddrI = Addr->getParent();
 
+      auto [Error, Pat] = traverseRegLoad(MRI, Cur, ReadSize, AddrI);
+      if (!Error)
+        return PPattern(std::move(Pat));
+
       if (AddrI->getOpcode() == TargetOpcode::G_INTTOPTR ||
           AddrI->getOpcode() == TargetOpcode::G_PTR_ADD)
         return traverseMemLoad(MRI, Cur, ReadSize, AddrI);
-      return traverseRegLoad(MRI, Cur, ReadSize, AddrI);
+
+      return PError(PatternErrorT::FORMAT_LOAD);
     }
     case TargetOpcode::G_CONSTANT: {
       auto *Imm = Cur.getOperand(1).getCImm();
