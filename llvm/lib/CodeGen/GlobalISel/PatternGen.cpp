@@ -1245,7 +1245,16 @@ static PatternOrError traverseRegStore(size_t Idx, MachineRegisterInfo &MRI,
 static PatternOrError traverseMemStore(LLT Type, MachineRegisterInfo &MRI,
                                        MachineInstr &Value,
                                        MachineInstr &Addr) {
-  auto ValueP = traverse(MRI, Value);
+  // Starting with LLVM20, there will be a G_TRUNC before G_STORE for s8, s16
+  // TODO: check if pattern matches
+  MachineInstr &ValMI = [&]() -> MachineInstr& {
+    if (Value.getOpcode() == TargetOpcode::G_TRUNC) {
+      Register SrcReg = Value.getOperand(1).getReg();
+      return *MRI.getVRegDef(SrcReg);
+    }
+    return Value;
+  }();
+  auto ValueP = traverse(MRI, ValMI);
   if (ValueP.first)
     return PError(ValueP.first);
   auto AddrP = traverse(MRI, Addr);
