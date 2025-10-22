@@ -144,7 +144,8 @@ enum PatternErrorT {
   FORMAT_LOAD,
   FORMAT_IMM,
   FORMAT,
-  MULTIPLE_STORES
+  MULTIPLE_STORES,
+  UNUSED_OPERANDS
 };
 struct PatternError {
   PatternErrorT Type;
@@ -165,7 +166,8 @@ llvm::Statistic *ErrorStats[] = {nullptr,
                                  &PatternGenNumErrorFormatLoad,
                                  &PatternGenNumErrorFormatImm,
                                  &PatternGenNumErrorFormat,
-                                 &PatternGenNumErrorMultipleStores};
+                                 &PatternGenNumErrorMultipleStores,
+                                 &PatternGenNumErrorUnusedOperand};
 
 static const std::unordered_map<unsigned, std::string> CmpStr = {
     {CmpInst::Predicate::ICMP_EQ, "SETEQ"},
@@ -218,6 +220,7 @@ struct PatternNode {
     PN_Binop,
     PN_Ternop,
     PN_Shuffle,
+    PN_SextInreg,
     PN_Compare,
     PN_Unop,
     PN_Constant,
@@ -329,6 +332,44 @@ struct ShuffleNode : public PatternNode {
 
   static bool classof(const PatternNode *Pat) {
     return Pat->getKind() == PN_Shuffle;
+  }
+};
+
+struct SextInregNode : public PatternNode {
+  int Op;
+  std::unique_ptr<PatternNode> First;
+  int Bit;
+
+  SextInregNode(LLT Type, int Op, std::unique_ptr<PatternNode> First, int Bit)
+      : PatternNode(PN_SextInreg, Type, false), Op(Op), First(std::move(First)),
+        Bit(Bit) {}
+
+  std::string patternString() override {
+    std::string TypeStr = lltToString(Type);
+    std::string MaskStr = "";
+
+    std::string OpString = "(sext_inreg " + First->patternString() +
+                           ", i" + std::to_string(Bit) + ")";
+
+    // Explicitly specifying types for all ops increases pattern compile time
+    // significantly, so we only do for ops where deduction fails otherwise.
+    bool PrintType = false;
+
+    if (PrintType)
+      return "(" + TypeStr + " " + OpString + ")";
+    return OpString;
+  }
+
+  LLT getRegisterTy(int OperandId) const override {
+    if (OperandId == -1)
+      return Type;
+
+    auto FirstT = First->getRegisterTy(OperandId);
+    return FirstT.isValid() ? FirstT : LLT();
+  }
+
+  static bool classof(const PatternNode *Pat) {
+    return Pat->getKind() == PN_SextInreg;
   }
 };
 
@@ -1220,6 +1261,27 @@ static PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
 
     return std::make_pair(SUCCESS, std::move(Node));
   }
+  case TargetOpcode::G_SEXT_INREG: {
+    assert(Cur.getOperand(1).isReg() && "expected register");
+    auto *First = MRI.getOneDef(Cur.getOperand(1).getReg());
+    if (!First)
+      return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
+    assert(Cur.getOperand(2).isImm() && "expected imm");
+    int Bit = Cur.getOperand(2).getImm();
+    if (Bit <= 0)
+      return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
+
+    auto [ErrFirst, NodeFirst] = traverse(MRI, *First->getParent());
+    if (ErrFirst)
+      return std::make_pair(ErrFirst, nullptr);
+
+    assert(Cur.getOperand(0).isReg() && "expected register");
+    auto Node = std::make_unique<SextInregNode>(
+        MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
+        std::move(NodeFirst), Bit);
+
+    return std::make_pair(SUCCESS, std::move(Node));
+  }
   }
 
   return std::make_pair(PatternError(FORMAT, &Cur), nullptr);
@@ -1243,7 +1305,16 @@ static PatternOrError traverseRegStore(size_t Idx, MachineRegisterInfo &MRI,
 static PatternOrError traverseMemStore(LLT Type, MachineRegisterInfo &MRI,
                                        MachineInstr &Value,
                                        MachineInstr &Addr) {
-  auto ValueP = traverse(MRI, Value);
+  // Starting with LLVM20, there will be a G_TRUNC before G_STORE for s8, s16
+  // TODO: check if pattern matches
+  MachineInstr &ValMI = [&]() -> MachineInstr& {
+    if (Value.getOpcode() == TargetOpcode::G_TRUNC) {
+      Register SrcReg = Value.getOperand(1).getReg();
+      return *MRI.getVRegDef(SrcReg);
+    }
+    return Value;
+  }();
+  auto ValueP = traverse(MRI, ValMI);
   if (ValueP.first)
     return PError(ValueP.first);
   auto AddrP = traverse(MRI, Addr);
@@ -1368,6 +1439,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   std::string OutsString;
   std::string InsString;
   for (size_t I = 0; I < CurInstr->fields.size() - 1; I++) {
+
     // handle unused operands
     if (!PatternArgs[I].In && !PatternArgs[I].Out) {
         llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "

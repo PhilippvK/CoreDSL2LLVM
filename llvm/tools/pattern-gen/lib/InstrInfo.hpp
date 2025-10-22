@@ -15,6 +15,7 @@ struct CDSLInstr
         uint8_t len;
         uint8_t dstOffset;
         uint8_t srcOffset;
+        uint64_t val;
     };
 
     enum FieldType
@@ -33,13 +34,15 @@ struct CDSLInstr
     struct Field
     {
         uint8_t len;
-        uint32_t constV;
+        uint64_t constV;
         std::string_view ident;
         uint32_t identIdx;
         FieldType type;
     };
 
+    uint8_t size;
     std::string name;
+    std::string mnemonic;
     std::string argString;
 
     llvm::SmallVector<Field, 4> fields;
