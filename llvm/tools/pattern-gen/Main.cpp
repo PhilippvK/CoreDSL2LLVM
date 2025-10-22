@@ -137,15 +137,6 @@ int main(int argc, char **argv) {
     auto Mod = std::make_unique<Module>("mod", Ctx);
     auto Instrs = ParseCoreDSL2(Ts, (XLen == 64), Mod.get(), NoExtend);
 
-    if (irOut) {
-      std::string Str;
-      raw_string_ostream OS(Str);
-      OS << *Mod;
-      OS.flush();
-      irOut << Str << "\n";
-      irOut.close();
-    }
-
     if (!SkipVerify)
       if (verifyModule(*Mod, &errs()))
         return -1;
@@ -179,6 +170,10 @@ int main(int argc, char **argv) {
                       .DumpMIR = PrintMIR.getValue()};
 
     optimizeBehavior(Mod.get(), Instrs, irOut, Args);
+
+    if (irOut)
+      irOut.close();
+
     if (PrintIR)
       llvm::outs() << *Mod << "\n";
     if (!SkipFmt)
