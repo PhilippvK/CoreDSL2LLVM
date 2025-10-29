@@ -1422,6 +1422,10 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   MayLoad = 0;
   MayStore = 0;
 
+  if (PatternGenArgs::Args.DumpMIR) {
+    MF.dump();
+  }
+
   std::string InstName = MF.getName().str().substr(4);
   std::string InstNameO = InstName;
   ++PatternGenNumInstructionsProcessed;
