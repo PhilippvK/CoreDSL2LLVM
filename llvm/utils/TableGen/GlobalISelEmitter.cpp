@@ -2427,10 +2427,12 @@ void GlobalISelEmitter::run(raw_ostream &OS) {
 
     // Include PatternGen-generated inc files here!
 
-    //#include "../../core_descs/MultiOutput.inc"
-    //#include "../../core_descs/Branch.inc"
+#ifdef USE_GENERATED_TABLES
+    #include "../../core_descs/MultiOutput.inc"
+    #include "../../core_descs/Branch.inc"
     #include "../../core_descs/ToycarOpt.inc"
-    //#include "../../core_descs/Store.inc"
+    #include "../../core_descs/Store.inc"
+#endif  // USE_GENERATED_TABLES
   }
   // Look through the SelectionDAG patterns we found, possibly emitting some.
   for (const PatternToMatch &Pat : CGP.ptms()) {

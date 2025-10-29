@@ -78,3 +78,7 @@ add_tablegen(llvm-tblgen LLVM
   DEPENDS
   intrinsics_gen # via llvm-min-tablegen
   )
+
+if(USE_GENERATED_TABLES)
+  target_compile_definitions(llvm-tblgen PRIVATE USE_GENERTAED_TABLES)
+endif()
