@@ -2145,6 +2145,12 @@ include "RISCVInstrInfoXMips.td"
 
 include "RISCVInstrGISel.td"
 
-
+//===----------------------------------------------------------------------===//
+// PatternGen
+//===----------------------------------------------------------------------===//
+#ifdef USE_GENERATED_FORMATS
 include "patternsInstrFormat.td"
+#endif  // USE_GENERATED_FORMATS
+#ifdef USE_GENERATED_PATTERNS
 include "patterns.td"
+#endif  // USE_GENERATED_PATTERNS
