@@ -1567,31 +1567,34 @@ struct PatternExtractor {
     if (Cur.getOpcode() == TargetOpcode::G_CONSTANT)
       return traverse_impl(MRI, Cur);
 
-    if (auto Iter = Handled.find(&Cur); Iter != Handled.end()) {
-      // If the value we're looking at has been processed before, we insert a
-      // Fork+ForkOther pair to re-use the existing value without duplication.
-      // This is required for multi-output.
+    if (PatternGenArgs::Args.GISelTableBackend) {
+      if (auto Iter = Handled.find(&Cur); Iter != Handled.end()) {
+        // If the value we're looking at has been processed before, we insert a
+        // Fork+ForkOther pair to re-use the existing value without duplication.
+        // This is required for multi-output.
 
-      // todo: add to existing fork.
-      PatternNode *Node = Iter->second;
-      PatternNode *Parent = Node->Parent;
+        // todo: add to existing fork.
+        PatternNode *Node = Iter->second;
+        PatternNode *Parent = Node->Parent;
 
-      auto Operands = Parent->getOperands();
-      auto OperandIter = std::find_if(
-          Operands.begin(), Operands.end(),
-          [=](std::unique_ptr<PatternNode> *Op) { return Op->get() == Node; });
-      assert(OperandIter != Operands.end());
-      std::unique_ptr<PatternNode> *Ptr = *OperandIter;
+        auto Operands = Parent->getOperands();
+        auto OperandIter = std::find_if(Operands.begin(), Operands.end(),
+                                        [=](std::unique_ptr<PatternNode> *Op) {
+                                          return Op->get() == Node;
+                                        });
+        assert(OperandIter != Operands.end());
+        std::unique_ptr<PatternNode> *Ptr = *OperandIter;
 
-      auto NodeOwning = std::move(*Ptr);
-      auto ForkNodeOwning = std::make_unique<ForkNode>(std::move(NodeOwning));
-      auto &ForkNode = *ForkNodeOwning;
-      (*Ptr) = std::move(ForkNodeOwning);
-      ForkNode.Parent = Parent;
+        auto NodeOwning = std::move(*Ptr);
+        auto ForkNodeOwning = std::make_unique<ForkNode>(std::move(NodeOwning));
+        auto &ForkNode = *ForkNodeOwning;
+        (*Ptr) = std::move(ForkNodeOwning);
+        ForkNode.Parent = Parent;
 
-      auto RetNode = std::make_unique<ForkOtherNode>(&ForkNode);
-      ForkNode.OtherUses.push_back(RetNode.get());
-      return PPattern(std::move(RetNode));
+        auto RetNode = std::make_unique<ForkOtherNode>(&ForkNode);
+        ForkNode.OtherUses.push_back(RetNode.get());
+        return PPattern(std::move(RetNode));
+      }
     }
 
     auto Rv = traverse_impl(MRI, Cur);
