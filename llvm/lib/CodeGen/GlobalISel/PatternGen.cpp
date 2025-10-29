@@ -2381,7 +2381,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   MayStore = 0;
   IsBranch = 0;
 
-  MF.dump();
+  // MF.dump();
 
   std::string InstName = MF.getName().str().substr(4);
   std::string InstNameO = InstName;
