@@ -2263,16 +2263,55 @@ private:
       process_impl(AsStore.Addr.get(), Idx, None_Ptr, OperandIdx::fixed(1));
       break;
     }
+    case PatternNode::PN_NOp: {
+      Error = "unknown node (NOp)";
+      break;
+    }
+    case PatternNode::PN_Ternop: {
+      // bool AsPtr = state == None_Ptr;
+
+      auto &AsTernop = llvm::cast<TernopNode>(*Node);
+      PromoteToInsnMatcher();
+
+      assert((unsigned)AsTernop.Op < NumFixedInstructions);
+      auto Opcode = AsTernop.Op;
+
+      // If the output type is a ptr convert G_ADD to G_PTR_ADD.
+      // if (AsPtr && Opcode == TargetOpcode::G_ADD)
+      //  Opcode = TargetOpcode::G_PTR_ADD;
+      CheckOpcode(FixedInstrs[Opcode]);
+
+      int OpsBase = 1;
+
+      bool LeftAsPtr = Opcode == TargetOpcode::G_PTR_ADD;
+
+      auto *First = AsTernop.First.get();
+      auto *Second = AsTernop.Second.get();
+      auto *Third = AsTernop.Third.get();
+
+      process_impl(First, Idx, LeftAsPtr ? None_Ptr : None,
+                   OperandIdx::fixed(OpsBase + 0));
+      process_impl(Second, Idx, None, OperandIdx::fixed(OpsBase + 1));
+      process_impl(Third, Idx, None, OperandIdx::fixed(OpsBase + 2));
+      break;
+      break;
+    }
+    case PatternNode::PN_Shuffle: {
+      Error = "unknown node (Shuffle)";
+      break;
+    }
+    case PatternNode::PN_Unop: {
+      Error = "unknown node (Unop)";
+      break;
+    }
+    case PatternNode::PN_Select: {
+      Error = "unknown node (Select)";
+      break;
+    }
 
     default:
       Error = "unknown node";
       break;
-
-      // case PatternNode::PN_NOp:
-      // case PatternNode::PN_Ternop:
-      // case PatternNode::PN_Shuffle:
-      // case PatternNode::PN_Unop:
-      // case PatternNode::PN_Select:
     }
   }
 
