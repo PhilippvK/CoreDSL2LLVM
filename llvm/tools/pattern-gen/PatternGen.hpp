@@ -11,6 +11,7 @@ struct PGArgsStruct {
   bool Is64Bit;
   bool DumpMIR;
   bool GISelTableBackend;
+  bool DumpMIR;
 };
 
 int optimizeBehavior(llvm::Module *M, std::vector<CDSLInstr> const &Instrs,
