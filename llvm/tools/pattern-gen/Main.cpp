@@ -167,8 +167,8 @@ int main(int argc, char **argv) {
                       .OptLevel = Opt,
                       .Predicates = Predicates,
                       .Is64Bit = (XLen == 64),
-                      .DumpMIR = PrintMIR.getValue(),
-                      .GISelTableBackend = UseGISelTable.getValue()};
+                      .GISelTableBackend = UseGISelTable.getValue(),
+                      .DumpMIR = PrintMIR.getValue()};
 
     optimizeBehavior(Mod.get(), Instrs, irOut, Args);
 
