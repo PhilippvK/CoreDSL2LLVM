@@ -55,6 +55,8 @@ static cl::opt<bool> SkipVerify("skip-verify",
                                 cl::cat(ToolOptions));
 static cl::opt<bool> PrintIR("print-ir", cl::desc("Print LLVM-IR module."),
                              cl::cat(ToolOptions));
+static cl::opt<bool> PrintMIR("print-mir", cl::desc("Print LLVM-MIR functions."),
+                             cl::cat(ToolOptions));
 static cl::opt<bool> NoExtend(
     "no-extend",
     cl::desc("Do not apply CDSL typing rules (Use C-like type inference)."),
@@ -173,7 +175,8 @@ int main(int argc, char **argv) {
                       .OptLevel = Opt,
                       .Predicates = Predicates,
                       .Is64Bit = (XLen == 64),
-                      .GISelTableBackend = UseGISelTable.getValue()};
+                      .GISelTableBackend = UseGISelTable.getValue(),
+                      .DumpMIR = PrintMIR.getValue()};
 
     optimizeBehavior(Mod.get(), Instrs, irOut, Args);
     if (PrintIR)

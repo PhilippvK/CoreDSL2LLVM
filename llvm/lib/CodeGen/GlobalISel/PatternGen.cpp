@@ -1430,6 +1430,7 @@ struct PatternExtractor {
 
   PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
 
+    // Cur.dump();
     if (Cur.getOpcode() == TargetOpcode::G_CONSTANT)
       return traverse_impl(MRI, Cur);
 
@@ -2381,7 +2382,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   MayStore = 0;
   IsBranch = 0;
 
-  // MF.dump();
+  if (PatternGenArgs::Args.DumpMIR) {
+    MF.dump();
+  }
 
   std::string InstName = MF.getName().str().substr(4);
   std::string InstNameO = InstName;
