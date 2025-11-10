@@ -1707,12 +1707,21 @@ public:
   }
   GISelTableBackend() {
     Output << "{\nRuleMatcher "
-              "RM{Locs};\nRuleMatcherScores[RM.getRuleID()] = "
-              "16;\nRM.addRequiredFeature(RK.getDef(\"HasVendorXCValu\"));\n"
-              "RM.addRequiredFeature(RK.getDef(\"IsRV"
-           << XLen
-           << "\"));\nInstructionMatcher &_0 = RM.addInstructionMatcher(\"\""
-              ");\n";
+              "RM{Locs};\nRuleMatcherScores[RM.getRuleID()] = 16;\n";
+    std::string input = PatternGenArgs::Args.Predicates;
+    std::stringstream ss(input);
+    std::string item;
+
+    while (std::getline(ss, item, ',')) {
+        // Trim leading/trailing spaces
+        item.erase(item.begin(), std::find_if(item.begin(), item.end(), [](unsigned char ch){ return !std::isspace(ch); }));
+        item.erase(std::find_if(item.rbegin(), item.rend(), [](unsigned char ch){ return !std::isspace(ch); }).base(), item.end());
+
+        // std::cout << "[" << item << "]\n";
+        Output << "RM.addRequiredFeature(RK.getDef(\"" << item << "\"));\n";
+    }
+    Output << "RM.addRequiredFeature(RK.getDef(\"IsRV" << XLen << "\"));\n";
+    Output << "InstructionMatcher &_0 = RM.addInstructionMatcher(\"\");\n";
   }
 
   std::optional<std::string> getError() { return Error; }
