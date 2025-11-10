@@ -2465,6 +2465,8 @@ void GlobalISelEmitter::run(raw_ostream &OS) {
                                &Target.getInstruction(RK.getDef("G_PTR_ADD"))};
 
     // Include PatternGen-generated inc files here!
+    // GlobalISelEmitter.cpp - gisel_table - INSERTION_START
+    // GlobalISelEmitter.cpp - gisel_table - INSERTION_END
 
 #ifdef USE_GENERATED_TABLES
     #include "../../core_descs/MultiOutput.inc"
