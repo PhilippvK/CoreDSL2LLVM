@@ -354,6 +354,7 @@ getConstantVRegValWithLookThrough(Register VReg, const MachineRegisterInfo &MRI,
           MRI.getType(MI->getOperand(0).getReg()).getSizeInBits()));
       VReg = MI->getOperand(1).getReg();
       break;
+    case TargetOpcode::G_CONSTANT_FOLD_BARRIER:
     case TargetOpcode::COPY:
       VReg = MI->getOperand(1).getReg();
       if (VReg.isPhysical())
