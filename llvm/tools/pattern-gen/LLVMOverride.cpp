@@ -152,10 +152,9 @@ public:
   }
 
   ScheduleDAGInstrs *
-  createMachineScheduler(MachineSchedContext *C) const override {
-    ScheduleDAGMILive *DAG = nullptr;
+  createMachineScheduler(MachineSchedContext *C) const {
+    ScheduleDAGMILive *DAG = createSchedLive(C);
     if (EnableMISchedLoadStoreClustering) {
-      DAG = createGenericSchedLive(C);
       DAG->addMutation(createLoadClusterDAGMutation(
           DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
       DAG->addMutation(createStoreClusterDAGMutation(
@@ -164,17 +163,15 @@ public:
 
     const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
     if (!DisableVectorMaskMutation && ST.hasVInstructions()) {
-      DAG = DAG ? DAG : createGenericSchedLive(C);
       DAG->addMutation(createRISCVVectorMaskDAGMutation(DAG->TRI));
     }
     return DAG;
   }
 
   ScheduleDAGInstrs *
-  createPostMachineScheduler(MachineSchedContext *C) const override {
-    ScheduleDAGMI *DAG = nullptr;
+  createPostMachineScheduler(MachineSchedContext *C) const {
+    ScheduleDAGMI *DAG = createSchedPostRA(C);
     if (EnablePostMISchedLoadStoreClustering) {
-      DAG = createGenericSchedPostRA(C);
       DAG->addMutation(createLoadClusterDAGMutation(
           DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
       DAG->addMutation(createStoreClusterDAGMutation(
@@ -441,7 +438,7 @@ public:
 
 void optimizeModule(llvm::TargetMachine *Machine, llvm::Module *Mod,
                     llvm::CodeGenOptLevel OptLevel) {
-  Mod->setTargetTriple(Machine->getTargetTriple().str());
+  Mod->setTargetTriple(Machine->getTargetTriple());
   Mod->setDataLayout(Machine->createDataLayout());
 
   // Create the analysis managers.
