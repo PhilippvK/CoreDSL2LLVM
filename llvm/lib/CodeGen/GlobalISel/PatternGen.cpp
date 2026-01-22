@@ -917,14 +917,11 @@ static PatternOrError traverseMemLoad(MachineRegisterInfo &MRI,
   abort();
 }
 
-
 static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
                                       MachineInstr &Cur, int ReadSize,
                                       MachineInstr *AddrI) {
 
   int ReadOffset = 0;
-  std::unique_ptr<PatternNode> Node;
-  LLT Type = MRI.getType(Cur.getOperand(0).getReg());
 
   if (AddrI->getOpcode() == TargetOpcode::G_PTR_ADD) {
     assert(AddrI->getOperand(1).isReg());
@@ -956,31 +953,31 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
     auto [ErrFalse, FalseNode] = traverseRegLoad(MRI, Cur, ReadSize, MRI.getVRegDef(FalseReg));
     if (ErrFalse)
       return PError(ErrFalse);
-    Node = std::make_unique<TernopNode>(
-        Type, AddrI->getOpcode(),
+    auto Node = std::make_unique<TernopNode>(
+        MRI.getType(Cur.getOperand(0).getReg()), AddrI->getOpcode(),
         std::move(CondNode), std::move(TrueNode), std::move(FalseNode));
-  } else {
-    if (AddrI->getOpcode() != TargetOpcode::COPY)
-      return pError(FORMAT_LOAD, AddrI);
-
-    assert(Cur.getOperand(1).isReg() && "expected register");
-    auto AddrLI = AddrI->getOperand(1).getReg();
-    if (!MRI.isLiveIn(AddrLI) || !AddrLI.isPhysical())
-      return pError(FORMAT_LOAD, AddrI);
-
-    auto [Idx, Field] = getArgInfo(MRI, AddrLI);
-    if (Field == nullptr)
-      return pError(FORMAT_LOAD, AddrI);
-
-    Type = MRI.getType(Cur.getOperand(0).getReg());
-    PatternArgs[Idx].Llt = Type;
-    PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].Llt);
-    PatternArgs[Idx].In = true;
-
-    assert(Cur.getOperand(0).isReg() && "expected register");
-    Node = std::make_unique<RegisterNode>(
-        Type, Field->ident, Idx, false, Type.getSizeInBits(), false);
+    return PPattern(std::move(Node));
   }
+  if (AddrI->getOpcode() != TargetOpcode::COPY)
+    return pError(FORMAT_LOAD, AddrI);
+
+  assert(Cur.getOperand(1).isReg() && "expected register");
+  auto AddrLI = AddrI->getOperand(1).getReg();
+  if (!MRI.isLiveIn(AddrLI) || !AddrLI.isPhysical())
+    return pError(FORMAT_LOAD, AddrI);
+
+  auto [Idx, Field] = getArgInfo(MRI, AddrLI);
+  if (Field == nullptr)
+    return pError(FORMAT_LOAD, AddrI);
+
+  auto Type = MRI.getType(Cur.getOperand(0).getReg());
+  PatternArgs[Idx].Llt = Type;
+  PatternArgs[Idx].ArgTypeStr = lltToRegTypeStr(PatternArgs[Idx].Llt);
+  PatternArgs[Idx].In = true;
+
+  assert(Cur.getOperand(0).isReg() && "expected register");
+  std::unique_ptr<PatternNode> Node = std::make_unique<RegisterNode>(
+      Type, Field->ident, Idx, false, Type.getSizeInBits(), false);
 
   bool SizeMismatch = (int)Type.getSizeInBits() != ReadSize;
 
