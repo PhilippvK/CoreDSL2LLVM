@@ -210,8 +210,12 @@ std::string lltToRegTypeStr(LLT Type) {
   return "invalid";
 }
 
-std::string makeImmTypeStr(int Size, bool Signed) {
-  return (Signed ? "simm" : "uimm") + std::to_string(Size);
+std::string makeImmTypeStr(int Size, bool Signed, std::string llvm_type) {
+  llvm::outs() << "makeImmTypeStr" << "\n";
+  llvm::outs() << "llvm_type=" << llvm_type << "\n";
+  if (llvm_type.empty())
+    return (Signed ? "simm" : "uimm") + std::to_string(Size);
+  return llvm_type;
 }
 
 struct PatternNode {
@@ -662,13 +666,14 @@ struct RegisterNode : public PatternNode {
   StringRef Name;
   int Size;
   bool Sext;
+  std::string llvm_type;
 
   size_t RegIdx;
 
   RegisterNode(LLT Type, StringRef Name, size_t RegIdx, bool IsImm, int Size,
-               bool Sext)
+               bool Sext, std::string llvm_type)
       : PatternNode(PN_Register, Type, IsImm), Name(Name), Size(Size),
-        Sext(Sext), RegIdx(RegIdx) {}
+        Sext(Sext), llvm_type(llvm_type), RegIdx(RegIdx) {}
 
   std::string patternString() override {
     std::string TypeStr = lltToString(Type);
@@ -676,8 +681,14 @@ struct RegisterNode : public PatternNode {
 
     if (IsImm) {
       // Immediate Operands
-      return ("(" + RegT + " ") + (Sext ? "simm" : "uimm") +
-             std::to_string(Size) + ":$" + std::string(Name) + ")";
+      llvm::outs() << "RegisterNode.patternString() IMM" << "\n";
+      llvm::outs() << "llvm_type=" << llvm_type << "\n";
+      std::string pre;
+      if (llvm_type.empty())
+        pre = (Sext ? "simm" : "uimm") + std::to_string(Size);
+      else
+        pre = llvm_type;
+      return ("(" + RegT + " ") + pre + ":$" + std::string(Name) + ")";
     }
 
     // Vector Types (currently rv32 only)
@@ -1018,7 +1029,7 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
 
   assert(Cur.getOperand(0).isReg() && "expected register");
   std::unique_ptr<PatternNode> Node = std::make_unique<RegisterNode>(
-      Type, Field->ident, Idx, false, Type.getSizeInBits(), false);
+      Type, Field->ident, Idx, false, Type.getSizeInBits(), false, Field->llvm_type);
 
   bool SizeMismatch = (int)Type.getSizeInBits() != ReadSize;
 
@@ -1202,7 +1213,7 @@ static PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
       PatternArgs[Idx].In = true;
       PatternArgs[Idx].Llt = LLT();
       PatternArgs[Idx].ArgTypeStr =
-          makeImmTypeStr(Field->len, Field->type & CDSLInstr::SIGNED);
+          makeImmTypeStr(Field->len, Field->type & CDSLInstr::SIGNED, Field->llvm_type);
 
       if (Field == nullptr)
         return std::make_pair(FORMAT_IMM, nullptr);
@@ -1211,7 +1222,7 @@ static PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
       return std::make_pair(
           SUCCESS, std::make_unique<RegisterNode>(
                        MRI.getType(Cur.getOperand(0).getReg()), Field->ident,
-                       Idx, true, Field->len, Field->type & CDSLInstr::SIGNED));
+                       Idx, true, Field->len, Field->type & CDSLInstr::SIGNED, Field->llvm_type));
     }
 
     // Else COPY is just a pass-through.
