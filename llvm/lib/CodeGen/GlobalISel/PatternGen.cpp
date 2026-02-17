@@ -1434,7 +1434,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   MayStore = 0;
 
   if (PatternGenArgs::Args.DumpMIR) {
-    MF.dump();
+    LLVM_DEBUG(MF.dump());
   }
 
   std::string InstName = MF.getName().str().substr(4);
