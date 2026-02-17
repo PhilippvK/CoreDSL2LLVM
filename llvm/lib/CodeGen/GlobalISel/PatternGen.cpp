@@ -211,8 +211,6 @@ std::string lltToRegTypeStr(LLT Type) {
 }
 
 std::string makeImmTypeStr(int Size, bool Signed, std::string llvm_type) {
-  llvm::outs() << "makeImmTypeStr" << "\n";
-  llvm::outs() << "llvm_type=" << llvm_type << "\n";
   if (llvm_type.empty())
     return (Signed ? "simm" : "uimm") + std::to_string(Size);
   return llvm_type;
@@ -681,8 +679,6 @@ struct RegisterNode : public PatternNode {
 
     if (IsImm) {
       // Immediate Operands
-      llvm::outs() << "RegisterNode.patternString() IMM" << "\n";
-      llvm::outs() << "llvm_type=" << llvm_type << "\n";
       std::string pre;
       if (llvm_type.empty())
         pre = (Sext ? "simm" : "uimm") + std::to_string(Size);
