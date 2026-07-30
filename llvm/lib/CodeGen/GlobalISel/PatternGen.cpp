@@ -1444,6 +1444,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
            "implementation function without instruction definition");
     CurInstr = It.base();
   }
+  std::string InstMnemonic = CurInstr->mnemonic;
 
   // We use the PatternArgs vector to store additional information
   // about parameters that may be found during pattern gen.
@@ -1505,7 +1506,7 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  llvm::outs() << "Pattern for " << InstName << ": " << Node->patternString()
+  llvm::outs() << "Pattern for " << InstName << " [" << InstMnemonic << "]: " << Node->patternString()
                << '\n';
   ++PatternGenNumPatternsGenerated;
 
