@@ -15,7 +15,7 @@ def : Pat<
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isCodeGenOnly = 1, Constraints = "" in def CV_ADDN_ : RVInst_CV_ADDN<(outs GPR:$rd), (ins uimm5:$Luimm5, GPR:$rs2, GPR:$rs1)>;
 
 def : Pat<
-	(i32 (i32 (sra (i32 (add GPR:$rs2, GPR:$rs1)), (i32 (i32 uimm5:$Luimm5))))),
+	(i32 (select (i32 (setcc (i32 (i32 uimm5:$Luimm5)), (i32 (i32 0)), SETEQ)), (add GPR:$rs2, GPR:$rs1), (select (i32 (setcc (i32 (i32 uimm5:$Luimm5)), (i32 (i32 32)), SETULT)), (or (i32 (srl (i32 (add GPR:$rs2, GPR:$rs1)), (i32 (i32 uimm5:$Luimm5)))), (i32 (shl (i32 (i32 (sra (i32 (i32 (shl (i32 (i32 (setcc (i32 (add GPR:$rs2, GPR:$rs1)), (i32 GPR:$rs1), SETULT))), (i32 (i32 31))))), (i32 (i32 31))))), (i32 (sub (i32 32), (i32 uimm5:$Luimm5)))))), (i32 (sra (i32 (i32 (sra (i32 (i32 (shl (i32 (i32 (setcc (i32 (add GPR:$rs2, GPR:$rs1)), (i32 GPR:$rs1), SETULT))), (i32 (i32 31))))), (i32 (i32 31))))), (i32 (add (i32 uimm5:$Luimm5), (i32 -32)))))))),
 	(CV_ADDN_ uimm5:$Luimm5, GPR:$rs2, GPR:$rs1)>;
 
 }
