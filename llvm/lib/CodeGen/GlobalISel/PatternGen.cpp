@@ -1435,7 +1435,6 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   }
 
   std::string InstName = MF.getName().str().substr(4);
-  std::string InstNameO = InstName;
   ++PatternGenNumInstructionsProcessed;
   {
     auto It = std::find_if(
@@ -1446,6 +1445,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
     CurInstr = It.base();
   }
   std::string InstMnemonic = CurInstr->mnemonic;
+  std::string LLVMInstr = CurInstr->llvm_instr;
+  std::string InstNameO = LLVMInstr.empty() ? InstName : LLVMInstr;
+
 
   // We use the PatternArgs vector to store additional information
   // about parameters that may be found during pattern gen.
