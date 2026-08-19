@@ -7,6 +7,7 @@ more aggressively directly.
 */
 #include "../lib/Target/RISCV/RISCVISelDAGToDAG.h"
 #include "../lib/Target/RISCV/RISCVTargetMachine.h"
+#include "../lib/Target/RISCV/RISCVMachineScheduler.h"
 #include "PatternGen.hpp"
 #include "llvm/Analysis/CGSCCPassManager.h"
 #include "llvm/Analysis/LoopAnalysisManager.h"
@@ -81,14 +82,11 @@ static bool EnableRISCVCopyPropagation = true;
 static bool EnableRISCVDeadRegisterElimination = true;
 static bool EnableSinkFold = true;
 static bool EnableLoopDataPrefetch = true;
-static bool EnableMISchedLoadStoreClustering = false;
-static bool EnablePostMISchedLoadStoreClustering = false;
-static bool EnableVLOptimizer = false;
 static bool DisableVectorMaskMutation = false;
+static bool EnableCFIInstrInserter = false;
 static bool EnableMachinePipeliner = false;
 static llvm::once_flag InitializeDefaultRVVRegisterAllocatorFlag;
 static auto RVVRegAlloc = useDefaultRegisterAllocator;
-static bool EnableVSETVLIAfterRVVRegAlloc = true;
 
 namespace {
 
@@ -153,30 +151,35 @@ public:
 
   ScheduleDAGInstrs *
   createMachineScheduler(MachineSchedContext *C) const {
-    ScheduleDAGMILive *DAG = createSchedLive(C);
-    if (EnableMISchedLoadStoreClustering) {
+    const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
+    ScheduleDAGMILive *DAG = createSchedLive<RISCVPreRAMachineSchedStrategy>(C);
+
+    if (ST.enableMISchedLoadClustering())
       DAG->addMutation(createLoadClusterDAGMutation(
           DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
+
+    if (ST.enableMISchedStoreClustering())
       DAG->addMutation(createStoreClusterDAGMutation(
           DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
-    }
 
-    const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
-    if (!DisableVectorMaskMutation && ST.hasVInstructions()) {
+    if (!DisableVectorMaskMutation && ST.hasVInstructions())
       DAG->addMutation(createRISCVVectorMaskDAGMutation(DAG->TRI));
-    }
+
     return DAG;
   }
 
   ScheduleDAGInstrs *
   createPostMachineScheduler(MachineSchedContext *C) const {
+    const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
     ScheduleDAGMI *DAG = createSchedPostRA(C);
-    if (EnablePostMISchedLoadStoreClustering) {
+
+    if (ST.enablePostMISchedLoadClustering())
       DAG->addMutation(createLoadClusterDAGMutation(
           DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
+
+    if (ST.enablePostMISchedStoreClustering())
       DAG->addMutation(createStoreClusterDAGMutation(
           DAG->TII, DAG->TRI, /*ReorderWhileClustering=*/true));
-    }
 
     return DAG;
   }
@@ -201,6 +204,7 @@ public:
   void addPreRegAlloc() override;
   void addPostRegAlloc() override;
   void addFastRegAlloc() override;
+  bool addILPOpts() override;
 
   std::unique_ptr<CSEConfigBase> getCSEConfig() const override;
 };
@@ -254,13 +258,15 @@ void RISCVPassConfig::addIRPasses() {
 
     addPass(createRISCVGatherScatterLoweringPass());
     addPass(createInterleavedAccessPass());
-    addPass(createRISCVCodeGenPreparePass());
+    addPass(createRISCVCodeGenPrepareLegacyPass());
   }
 
   TargetPassConfig::addIRPasses();
 }
 
 bool RISCVPassConfig::addPreISel() {
+  if (TM->getOptLevel() != CodeGenOptLevel::None)
+    addPass(createRISCVPromoteConstantPass());
   if (TM->getOptLevel() != CodeGenOptLevel::None) {
     // Add a barrier before instruction selection so that we will not get
     // deleted block address after enabling default outlining. See D99707 for
@@ -344,6 +350,12 @@ void RISCVPassConfig::addPreEmitPass() {
   if (TM->getOptLevel() >= CodeGenOptLevel::Default &&
       EnableRISCVCopyPropagation)
     addPass(createMachineCopyPropagationPass(true));
+  if (TM->getOptLevel() >= CodeGenOptLevel::Default)
+    addPass(createRISCVLateBranchOptPass());
+  // The IndirectBranchTrackingPass inserts lpad and could have changed the
+  // basic block alignment. It must be done before Branch Relaxation to
+  // prevent the adjusted offset exceeding the branch range.
+  addPass(createRISCVIndirectBranchTrackingPass());
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
 }
@@ -355,7 +367,6 @@ void RISCVPassConfig::addPreEmitPass2() {
     // ensuring return instruction is detected correctly.
     addPass(createRISCVPushPopOptimizationPass());
   }
-  addPass(createRISCVIndirectBranchTrackingPass());
   addPass(createRISCVExpandPseudoPass());
 
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
@@ -367,15 +378,16 @@ void RISCVPassConfig::addPreEmitPass2() {
   addPass(createUnpackMachineBundles([&](const MachineFunction &MF) {
     return MF.getFunction().getParent()->getModuleFlag("kcfi");
   }));
+
+  if (EnableCFIInstrInserter)
+    addPass(createCFIInstrInserter());
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
   addPass(createRISCVVectorPeepholePass());
+  addPass(createRISCVFoldMemOffsetPass());
 
   TargetPassConfig::addMachineSSAOptimization();
-
-  if (EnableMachineCombiner)
-    addPass(&MachineCombinerID);
 
   if (TM->getTargetTriple().isRISCV64()) {
     addPass(createRISCVOptWInstrsPass());
@@ -386,8 +398,9 @@ void RISCVPassConfig::addPreRegAlloc() {
   addPass(createRISCVPreRAExpandPseudoPass());
   if (TM->getOptLevel() != CodeGenOptLevel::None) {
     addPass(createRISCVMergeBaseOffsetOptPass());
-    if (EnableVLOptimizer)
-      addPass(createRISCVVLOptimizerPass());
+    addPass(createRISCVVLOptimizerPass());
+    // Add Zilsd pre-allocation load/store optimization
+    addPass(createRISCVPreAllocZilsdOptPass());
   }
 
   addPass(createRISCVInsertReadWriteCSRPass());
@@ -396,6 +409,8 @@ void RISCVPassConfig::addPreRegAlloc() {
 
   if (TM->getOptLevel() != CodeGenOptLevel::None && EnableMachinePipeliner)
     addPass(&MachinePipelinerID);
+
+  addPass(createRISCVVMV0EliminationPass());
 }
 
 void RISCVPassConfig::addFastRegAlloc() {
@@ -408,6 +423,13 @@ void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOptLevel::None &&
       EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
+}
+
+bool RISCVPassConfig::addILPOpts() {
+  if (EnableMachineCombiner)
+    addPass(&MachineCombinerID);
+
+  return true;
 }
 
 
@@ -536,6 +558,7 @@ int runOptPipeline(llvm::Module *M, bool Is64Bit, std::string Mattr,
   initializeHardwareLoopsLegacyPass(*Registry);
   initializeTransformUtils(*Registry);
   initializeReplaceWithVeclibLegacyPass(*Registry);
+  // TODO: add missing?
 
   // Initialize debugging passes.
   initializeScavengerTestPass(*Registry);
