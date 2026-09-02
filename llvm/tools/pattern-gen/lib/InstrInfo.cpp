@@ -1,5 +1,6 @@
 #include "InstrInfo.hpp"
 #include <algorithm>
+#include <set>
 #include <sstream>
 
 std::string EncodingToTablgen(CDSLInstr const &instr) {
@@ -40,6 +41,13 @@ std::string EncodingToTablgen(CDSLInstr const &instr) {
 
 void PrintInstrsAsTableGen(std::vector<CDSLInstr> const &instrs,
                            std::ostream &ostream) {
-  for (auto const &instr : instrs)
+  std::set<std::string> emitted;
+  for (auto const &instr : instrs) {
+    std::string targetName =
+        instr.llvm_instr.empty() ? instr.name : instr.llvm_instr;
+
+    if (!emitted.insert(targetName).second)
+      continue;
     ostream << EncodingToTablgen(instr) << '\n';
+  }
 }
