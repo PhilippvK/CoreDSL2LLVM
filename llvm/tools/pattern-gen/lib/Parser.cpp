@@ -1556,12 +1556,17 @@ auto MakeImplFunction(llvm::Module *mod, CDSLInstr &instr) {
       assert(&field == &instr.fields.back());
       break;
     }
+
+    // Fixed immediates are part of the target instruction, but not
+    // arguments of the specialized semantic implementation.
+    if (field.fixedImm)
+      continue;
     llvm::Type *argT = ptrT;
-    int argBitLen = -1;
+    // int argBitLen = -1;
 
     if (field.type & CDSLInstr::IMM) {
       argT = immT;
-      argBitLen = field.len;
+      // argBitLen = field.len;
     }
     argTypes.push_back(argT);
     argNames.push_back(field.ident);
@@ -1581,9 +1586,19 @@ auto MakeImplFunction(llvm::Module *mod, CDSLInstr &instr) {
   // the destination does not overlap with sources.
   // For simulators using this generated code, this means
   // that rd has to be a pointer to a temporary variable.
-  for (size_t i = 0; i < instr.fields.size(); i++)
-    if (instr.fields[i].type & CDSLInstr::OUT)
-      func->getArg(i)->addAttr(llvm::Attribute::NoAlias);
+  size_t argIdx = 0;
+  for (auto const &field : instr.fields) {
+    if (!(field.type & CDSLInstr::NON_CONST))
+      break;
+
+    if (field.fixedImm)
+      continue;
+
+    if (field.type & CDSLInstr::OUT)
+      func->getArg(argIdx)->addAttr(llvm::Attribute::NoAlias);
+
+    ++argIdx;
+  }
 
   return func;
 }
@@ -1676,25 +1691,22 @@ bool UnrollImms(llvm::Module *mod, std::vector<CDSLInstr> &instrs,
 
       for (int64_t imm = start; imm != end; imm++) {
         CDSLInstr instrClone{instr};
-        instrClone.argString = std::regex_replace(
-            instrClone.argString, std::regex("\\$" + std::string(field.ident)),
-            std::to_string(imm));
+
+        // Remember the actual target instruction before changing the
+        // semantic implementation name.
+        if (instrClone.llvm_instr.empty())
+          instrClone.llvm_instr = instr.name;
 
         instrClone.name += std::string("_") + ((imm < 0) ? "n" : "") +
                            std::to_string(std::abs(imm));
 
-        auto &constField = instrClone.fields.back();
-        for (auto &frag : instrClone.frags) {
-          if (frag.idx == fieldIdx) {
-            constField.constV |=
-                ((imm >> frag.srcOffset) & ((1 << frag.len) - 1))
-                << frag.dstOffset;
-            frag.srcOffset = frag.dstOffset;
-            frag.idx = instrClone.fields.size() - 2;
-          } else if (frag.idx > fieldIdx)
-            frag.idx--;
-        }
-        instrClone.fields.erase(instrClone.fields.begin() + fieldIdx);
+        auto &fixedField = instrClone.fields[fieldIdx];
+        fixedField.fixedImm = imm;
+
+        // It has now been handled, so recursive UnrollImms() must not
+        // try to unroll this operand again.
+        fixedField.type = static_cast<CDSLInstr::FieldType>(
+            fixedField.type & ~CDSLInstr::UNROLL_IMM);
 
         auto *func = MakeImplFunction(mod, instrClone);
         entry = llvm::BasicBlock::Create(mod->getContext(), "", func);
@@ -1704,19 +1716,42 @@ bool UnrollImms(llvm::Module *mod, std::vector<CDSLInstr> &instrs,
         // mod->dump();
         assert(implFunc);
         llvm::SmallVector<llvm::Value *> args;
-        args.reserve(implFunc->arg_size());
-        for (unsigned i = 0; i < implFunc->arg_size(); i++) {
-          if (i == fieldIdx)
-            args.push_back(llvm::ConstantInt::get(
-                implFunc->getArg(i)->getType(), imm, isSigned));
-          else
-            args.push_back(func->getArg(i < fieldIdx ? i : (i - 1)));
+
+        unsigned parentArgIdx = 0;
+        unsigned cloneArgIdx = 0;
+
+        for (unsigned i = 0; i < instr.fields.size(); ++i) {
+          const auto &parentField = instr.fields[i];
+
+          if (!(parentField.type & CDSLInstr::NON_CONST))
+            break;
+
+          // Already-fixed operands aren't arguments of the parent
+          // implementation.
+          if (parentField.fixedImm)
+            continue;
+
+          if (i == fieldIdx) {
+            // This is the operand being specialized at this level.
+            auto *parentArg = implFunc->getArg(parentArgIdx);
+
+            args.push_back(
+                llvm::ConstantInt::get(parentArg->getType(), imm, isSigned));
+
+            ++parentArgIdx;
+            continue;
+          }
+
+          args.push_back(func->getArg(cloneArgIdx++));
+
+          ++parentArgIdx;
         }
 
         // This makes the optimizer delete the original implFunc after inlining
         // it.
         implFunc->setLinkage(llvm::GlobalValue::InternalLinkage);
 
+        assert(args.size() == implFunc->arg_size());
         build.CreateCall(implFunc, args);
         build.CreateRetVoid();
 

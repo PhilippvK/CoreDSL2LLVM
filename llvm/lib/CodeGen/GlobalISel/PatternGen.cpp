@@ -1091,15 +1091,36 @@ struct PatternExtractor {
     return std::make_tuple(SUCCESS, std::move(Operands));
   }
 
+  static int getFieldIdxForArgIdx(int ArgIdx) {
+    int CurArgIdx = 0;
+
+    for (size_t FieldIdx = 0; FieldIdx < CurInstr->fields.size() - 1;
+         ++FieldIdx) {
+      const auto &Field = CurInstr->fields[FieldIdx];
+
+      if (Field.fixedImm)
+        continue;
+
+      if (CurArgIdx == ArgIdx)
+        return FieldIdx;
+
+      ++CurArgIdx;
+    }
+
+    return -1;
+  }
+
   static int getArgIdx(MachineRegisterInfo &MRI, Register Reg) {
     auto It = std::find_if(MRI.livein_begin(), MRI.livein_end(),
-                           [&](std::pair<MCRegister, Register> const &E) {
+                           [&](const std::pair<MCRegister, Register> &E) {
                              return E.first == Reg.asMCReg();
                            });
 
     if (It == MRI.livein_end())
       return -1;
-    return It - MRI.livein_begin();
+
+    int FunctionArgIdx = It - MRI.livein_begin();
+    return getFieldIdxForArgIdx(FunctionArgIdx);
   }
 
   static CDSLInstr::Field const *getArgField(MachineRegisterInfo &MRI,
@@ -2575,41 +2596,57 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
 
     LLT OutType = LLT();
     std::string OutsString;
-    std::string InsString;
+    // std::string InsString;
+    std::string DefInsString;
+    std::string PatternDstOps;
     for (size_t I = 0; I < CurInstr->fields.size() - 1; I++) {
+      auto const &Field = CurInstr->fields[I];
+      if (Field.fixedImm) {
+        assert(Field.type & CDSLInstr::IMM);
+        // It still exists in the actual machine instruction definition.
+        std::string ImmType = makeImmTypeStr(
+            Field.len, Field.type & CDSLInstr::SIGNED, Field.llvm_type);
+
+        DefInsString += ImmType + ":$" + std::string(Field.ident) + ", ";
+
+        // But this particular semantic pattern selects a fixed value.
+        PatternDstOps += std::to_string(*Field.fixedImm) + ", ";
+        continue;
+      }
       // handle unused operands
       if (!PatternArgs[I].In && !PatternArgs[I].Out) {
         llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
-                     << "Operand '" << CurInstr->fields[I].ident
+                     << "Operand '" << Field.ident
                      << "' not used in pattern!\n";
         ++PatternGenNumErrorUnusedOperand;
         return true;
       }
 
       // check for missmatches between operands
-      if ((CurInstr->fields[I].type & CDSLInstr::IN) && !PatternArgs[I].In) {
+      if ((Field.type & CDSLInstr::IN) && !PatternArgs[I].In) {
         llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
-                     << "Operand '" << CurInstr->fields[I].ident
-                     << "' should be an input!\n";
+                     << "Operand '" << Field.ident << "' should be an input!\n";
         ++PatternGenNumErrorOperandMissmatch;
         return true;
       }
-      if ((CurInstr->fields[I].type & CDSLInstr::OUT) && !PatternArgs[I].Out) {
+      if ((Field.type & CDSLInstr::OUT) && !PatternArgs[I].Out) {
         llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
-                     << "Operand '" << CurInstr->fields[I].ident
+                     << "Operand '" << Field.ident
                      << "' should be an output!\n";
         ++PatternGenNumErrorOperandMissmatch;
         return true;
       }
       if (PatternArgs[I].In) {
-        InsString += PatternArgs[I].ArgTypeStr + ":$" +
-                     std::string(CurInstr->fields[I].ident) + ", ";
+        std::string Op =
+            PatternArgs[I].ArgTypeStr + ":$" + std::string(Field.ident);
+
+        DefInsString += Op + ", ";
+        PatternDstOps += Op + ", ";
       }
       if (PatternArgs[I].Out) {
         bool IO = PatternArgs[I].In;
         OutsString += PatternArgs[I].ArgTypeStr + ":$" +
-                      std::string(CurInstr->fields[I].ident) +
-                      (IO ? "_wb, " : ", ");
+                      std::string(Field.ident) + (IO ? "_wb, " : ", ");
 
         assert(!OutType.isValid() || PatternGenArgs::Args.GISelTableBackend);
         OutType = PatternArgs[I].Llt;
@@ -2624,46 +2661,53 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
                    << "]: " << Node->patternString() << '\n';
     ++PatternGenNumPatternsGenerated;
 
-    InsString = InsString.substr(0, InsString.size() - 2);
+    DefInsString = DefInsString.substr(0, DefInsString.size() - 2);
+    PatternDstOps = PatternDstOps.substr(0, PatternDstOps.size() - 2);
     OutsString = OutsString.substr(0, OutsString.size() - 2);
 
     auto &OutStream = *PatternGenArgs::OutStream;
 
-    OutStream << "let hasSideEffects = " + std::to_string((int)HasSideEffects) +
-                     ", mayLoad = " + std::to_string((int)MayLoad) +
-                     ", mayStore = " + std::to_string((int)MayStore) +
-                     ", isBranch = " + std::to_string((int)IsBranch) +
-                     ", isTerminator = " + std::to_string((int)IsBranch) +
-                     ", "
-                     "isCodeGenOnly = 1";
+    std::string TargetDefName = InstNameO + "_";
+    static llvm::StringSet<> EmittedInstructionDefs;
+    if (EmittedInstructionDefs.insert(TargetDefName).second) {
+      OutStream << "let hasSideEffects = " +
+                       std::to_string((int)HasSideEffects) +
+                       ", mayLoad = " + std::to_string((int)MayLoad) +
+                       ", mayStore = " + std::to_string((int)MayStore) +
+                       ", isBranch = " + std::to_string((int)IsBranch) +
+                       ", isTerminator = " + std::to_string((int)IsBranch) +
+                       ", "
+                       "isCodeGenOnly = 1";
 
-    OutStream << ", Constraints = \"";
-    {
-      std::string Constr = "";
-      for (size_t I = 0; I < CurInstr->fields.size() - 1; I++) {
-        auto const &Field = CurInstr->fields[I];
-        if (PatternArgs[I].In && PatternArgs[I].Out)
-          Constr += "$" + std::string(Field.ident) + " = $" +
-                    std::string(Field.ident) + "_wb, ";
+      OutStream << ", Constraints = \"";
+      {
+        std::string Constr = "";
+        for (size_t I = 0; I < CurInstr->fields.size() - 1; I++) {
+          auto const &Field = CurInstr->fields[I];
+          if (PatternArgs[I].In && PatternArgs[I].Out)
+            Constr += "$" + std::string(Field.ident) + " = $" +
+                      std::string(Field.ident) + "_wb, ";
+        }
+        Constr = Constr.substr(0, Constr.size() - 2);
+        OutStream << Constr;
       }
-      Constr = Constr.substr(0, Constr.size() - 2);
-      OutStream << Constr;
+      OutStream << "\" in ";
+      OutStream << "def " << TargetDefName << " : RVInst_" << InstNameO
+                << "<(outs " << OutsString << "), (ins " << DefInsString
+                << ")>;\n";
     }
-    OutStream << "\" in ";
-    OutStream << "def " << InstName << "_ : RVInst_" << InstNameO << "<(outs "
-              << OutsString << "), (ins " << InsString << ")>;\n";
 
     if (!PatternGenArgs::Args.GISelTableBackend) {
       std::string PatternStr = Node->patternString();
       std::string Code = "def : Pat<\n\t";
 
       if (OutType.isValid())
-        Code += "(" + lltToString(OutType) + " " + PatternStr + "),\n\t(" +
-                InstName + "_ ";
+        Code += "(" + lltToString(OutType) + " " + PatternStr + "),\n\t";
       else
-        Code += PatternStr + ",\n\t(" + InstName + "_ ";
+        Code += PatternStr + ",\n\t";
 
-      Code += InsString;
+      Code += "(" + TargetDefName + " ";
+      Code += PatternDstOps;
       Code += ")>;";
       OutStream << "\n" << Code << "\n\n";
     }
