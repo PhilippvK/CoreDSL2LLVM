@@ -9,7 +9,6 @@ struct PGArgsStruct {
   llvm::CodeGenOptLevel OptLevel;
   std::string Predicates;
   bool Is64Bit;
-  bool DumpMIR;
   bool GISelTableBackend;
   bool DumpMIR;
 };

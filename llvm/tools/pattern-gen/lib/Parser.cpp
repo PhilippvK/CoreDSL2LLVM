@@ -1765,7 +1765,6 @@ std::vector<CDSLInstr> ParseCoreDSL2(TokenStream &ts, bool is64Bit,
       ++PatternGenNumInstructionsParsed;
 
       Token ident = pop_cur(ts, Identifier);
-      pop_cur(ts, CBrOpen);
       CDSLInstr instr{std::string(ident.ident.str)};
       curInstr = &instr;
 
