@@ -1701,7 +1701,7 @@ bool UnrollImms(llvm::Module *mod, std::vector<CDSLInstr> &instrs,
         llvm::IRBuilder<> build(entry);
 
         auto *implFunc = mod->getFunction("impl" + instr.name);
-        mod->dump();
+        // mod->dump();
         assert(implFunc);
         llvm::SmallVector<llvm::Value *> args;
         args.reserve(implFunc->arg_size());
