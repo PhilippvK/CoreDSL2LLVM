@@ -3,6 +3,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -37,6 +38,9 @@ struct CDSLInstr {
     uint32_t identIdx;
     FieldType type;
     std::string llvm_type;
+    // Set only on semantic specializations produced by [[is_unroll_imm]].
+    std::optional<int64_t> fixedImm;
+    bool isFixedImm() const { return fixedImm.has_value(); }
   };
 
   uint8_t size;
