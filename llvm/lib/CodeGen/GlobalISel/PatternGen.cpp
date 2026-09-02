@@ -503,30 +503,6 @@ struct RegisterNode : public PatternNode {
   std::string llvm_type;
 
   size_t RegIdx;
-  /*
-  /usr/include/c++/9/bits/unique_ptr.h:857:30: error: no matching function for
-call to ‘RegisterNode::RegisterNode(llvm::LLT&, const
-std::basic_string_view<char>&, int&, bool, llvm::TypeSize, bool)’ 857 |     {
-return unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...)); } |
-^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/work/git/CoreDSL2LLVM/llvm/lib/CodeGen/GlobalISel/PatternGen.cpp:485:3: note:
-candidate: ‘RegisterNode::RegisterNode(llvm::LLT, llvm::StringRef, size_t, bool,
-int, bool, std::string)’ 485 |   RegisterNode(LLT Type, StringRef Name, size_t
-RegIdx, bool IsImm, int Size, |   ^~~~~~~~~~~~
-/work/git/CoreDSL2LLVM/llvm/lib/CodeGen/GlobalISel/PatternGen.cpp:485:3: note:
-candidate expects 7 arguments, 6 provided
-/work/git/CoreDSL2LLVM/llvm/lib/CodeGen/GlobalISel/PatternGen.cpp:475:8: note:
-candidate: ‘RegisterNode::RegisterNode(const RegisterNode&)’ 475 | struct
-RegisterNode : public PatternNode { |        ^~~~~~~~~~~~
-/work/git/CoreDSL2LLVM/llvm/lib/CodeGen/GlobalISel/PatternGen.cpp:475:8: note:
-candidate expects 1 argument, 6 provided
-/work/git/CoreDSL2LLVM/llvm/lib/CodeGen/GlobalISel/PatternGen.cpp:475:8: note:
-candidate: ‘RegisterNode::RegisterNode(RegisterNode&&)’
-/work/git/CoreDSL2LLVM/llvm/lib/CodeGen/GlobalISel/PatternGen.cpp:475:8: note:
-candidate expects 1 argument, 6 provided [40/2926] Building CXX object
-lib/Transforms/Scalar/CMakeFiles/LLVMScalarOpts.dir/LoopStrengthReduce.cpp.o
-ninja: build stopped: subcommand failed.
-  */
 
   RegisterNode(LLT Type, StringRef Name, size_t RegIdx, bool IsImm, int Size,
                bool Sext, std::string llvm_type)
