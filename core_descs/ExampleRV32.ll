@@ -1,179 +1,121 @@
 ; ModuleID = 'mod'
 source_filename = "mod"
+target datalayout = "e-m:e-p:32:32-i64:64-n32-S128"
+target triple = "riscv32-unknown-linux-gnu"
 
-define void @implLB(ptr noalias %rd, ptr %rs1, i32 %imm) {
-  %1 = and i32 %imm, 4095
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(read, argmem: readwrite, inaccessiblemem: write)
+define void @implLB(ptr noalias writeonly captures(none) initializes((0, 4)) %rd, ptr readonly captures(none) %rs1, i32 %imm) local_unnamed_addr #0 {
+  %1 = add i32 %imm, 2048
+  %2 = icmp ult i32 %1, 4096
+  tail call void @llvm.assume(i1 %2)
   %rs1.v = load i32, ptr %rs1, align 4
   %3 = add i32 %rs1.v, %imm
-  %4 = alloca i32, align 4
-  store i32 %3, ptr %4, align 4
-  %.v = load i32, ptr %4, align 4
-  %5 = inttoptr i32 %.v to ptr
-  %.v1 = load i8, ptr %5, align 1
-  %6 = alloca i8, align 1
-  store i8 %.v1, ptr %6, align 1
-  br i1 true, label %7, label %9
-
-7:                                                ; preds = %0
-  %.v2 = load i8, ptr %6, align 1
-  %8 = sext i8 %.v2 to i32
-  store i32 %8, ptr %rd, align 4
-  br label %9
-
-9:                                                ; preds = %7, %0
+  %4 = inttoptr i32 %3 to ptr
+  %.v1 = load i8, ptr %4, align 1
+  %5 = sext i8 %.v1 to i32
+  store i32 %5, ptr %rd, align 4
   ret void
 }
 
-; Function Attrs: nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)
-declare void @llvm.assume(i1 noundef) #0
+; Function Attrs: mustprogress nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)
+declare void @llvm.assume(i1 noundef) #1
 
-define void @implLH(ptr noalias %rd, ptr %rs1, i32 %imm) {
-  %1 = and i32 %imm, 4095
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(read, argmem: readwrite, inaccessiblemem: write)
+define void @implLH(ptr noalias writeonly captures(none) initializes((0, 4)) %rd, ptr readonly captures(none) %rs1, i32 %imm) local_unnamed_addr #0 {
+  %1 = add i32 %imm, 2048
+  %2 = icmp ult i32 %1, 4096
+  tail call void @llvm.assume(i1 %2)
   %rs1.v = load i32, ptr %rs1, align 4
   %3 = add i32 %rs1.v, %imm
-  %4 = alloca i32, align 4
-  store i32 %3, ptr %4, align 4
-  %.v = load i32, ptr %4, align 4
-  %5 = inttoptr i32 %.v to ptr
-  %.v1 = load i16, ptr %5, align 2
-  %6 = alloca i16, align 2
-  store i16 %.v1, ptr %6, align 2
-  br i1 true, label %7, label %9
-
-7:                                                ; preds = %0
-  %.v2 = load i16, ptr %6, align 2
-  %8 = sext i16 %.v2 to i32
-  store i32 %8, ptr %rd, align 4
-  br label %9
-
-9:                                                ; preds = %7, %0
+  %4 = inttoptr i32 %3 to ptr
+  %.v1 = load i16, ptr %4, align 2
+  %5 = sext i16 %.v1 to i32
+  store i32 %5, ptr %rd, align 4
   ret void
 }
 
-define void @implLW(ptr noalias %rd, ptr %rs1, i32 %imm) {
-  %1 = and i32 %imm, 4095
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(read, argmem: readwrite, inaccessiblemem: write)
+define void @implLW(ptr noalias writeonly captures(none) initializes((0, 4)) %rd, ptr readonly captures(none) %rs1, i32 %imm) local_unnamed_addr #0 {
+  %1 = add i32 %imm, 2048
+  %2 = icmp ult i32 %1, 4096
+  tail call void @llvm.assume(i1 %2)
   %rs1.v = load i32, ptr %rs1, align 4
   %3 = add i32 %rs1.v, %imm
-  %4 = alloca i32, align 4
-  store i32 %3, ptr %4, align 4
-  %.v = load i32, ptr %4, align 4
-  %5 = inttoptr i32 %.v to ptr
-  %.v1 = load i32, ptr %5, align 4
-  %6 = alloca i32, align 4
-  store i32 %.v1, ptr %6, align 4
-  br i1 true, label %7, label %8
-
-7:                                                ; preds = %0
-  %.v2 = load i32, ptr %6, align 4
-  store i32 %.v2, ptr %rd, align 4
-  br label %8
-
-8:                                                ; preds = %7, %0
+  %4 = inttoptr i32 %3 to ptr
+  %.v1 = load i32, ptr %4, align 4
+  store i32 %.v1, ptr %rd, align 4
   ret void
 }
 
-define void @implLBU(ptr noalias %rd, ptr %rs1, i32 %imm) {
-  %1 = and i32 %imm, 4095
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(read, argmem: readwrite, inaccessiblemem: write)
+define void @implLBU(ptr noalias writeonly captures(none) initializes((0, 4)) %rd, ptr readonly captures(none) %rs1, i32 %imm) local_unnamed_addr #0 {
+  %1 = add i32 %imm, 2048
+  %2 = icmp ult i32 %1, 4096
+  tail call void @llvm.assume(i1 %2)
   %rs1.v = load i32, ptr %rs1, align 4
   %3 = add i32 %rs1.v, %imm
-  %4 = alloca i32, align 4
-  store i32 %3, ptr %4, align 4
-  %.v = load i32, ptr %4, align 4
-  %5 = inttoptr i32 %.v to ptr
-  %.v1 = load i8, ptr %5, align 1
-  %6 = alloca i8, align 1
-  store i8 %.v1, ptr %6, align 1
-  br i1 true, label %7, label %9
-
-7:                                                ; preds = %0
-  %.v2 = load i8, ptr %6, align 1
-  %8 = zext i8 %.v2 to i32
-  store i32 %8, ptr %rd, align 4
-  br label %9
-
-9:                                                ; preds = %7, %0
+  %4 = inttoptr i32 %3 to ptr
+  %.v1 = load i8, ptr %4, align 1
+  %5 = zext i8 %.v1 to i32
+  store i32 %5, ptr %rd, align 4
   ret void
 }
 
-define void @implLHU(ptr noalias %rd, ptr %rs1, i32 %imm) {
-  %1 = and i32 %imm, 4095
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(read, argmem: readwrite, inaccessiblemem: write)
+define void @implLHU(ptr noalias writeonly captures(none) initializes((0, 4)) %rd, ptr readonly captures(none) %rs1, i32 %imm) local_unnamed_addr #0 {
+  %1 = add i32 %imm, 2048
+  %2 = icmp ult i32 %1, 4096
+  tail call void @llvm.assume(i1 %2)
   %rs1.v = load i32, ptr %rs1, align 4
   %3 = add i32 %rs1.v, %imm
-  %4 = alloca i32, align 4
-  store i32 %3, ptr %4, align 4
-  %.v = load i32, ptr %4, align 4
-  %5 = inttoptr i32 %.v to ptr
-  %.v1 = load i16, ptr %5, align 2
-  %6 = alloca i16, align 2
-  store i16 %.v1, ptr %6, align 2
-  br i1 true, label %7, label %9
-
-7:                                                ; preds = %0
-  %.v2 = load i16, ptr %6, align 2
-  %8 = zext i16 %.v2 to i32
-  store i32 %8, ptr %rd, align 4
-  br label %9
-
-9:                                                ; preds = %7, %0
+  %4 = inttoptr i32 %3 to ptr
+  %.v1 = load i16, ptr %4, align 2
+  %5 = zext i16 %.v1 to i32
+  store i32 %5, ptr %rd, align 4
   ret void
 }
 
-define void @implSB(ptr %rs1, ptr %rs2, i32 %imm) {
-  %1 = and i32 %imm, 4095
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(write, argmem: readwrite)
+define void @implSB(ptr readonly captures(none) %rs1, ptr readonly captures(none) %rs2, i32 %imm) local_unnamed_addr #2 {
+  %1 = add i32 %imm, 2048
+  %2 = icmp ult i32 %1, 4096
+  tail call void @llvm.assume(i1 %2)
   %rs1.v = load i32, ptr %rs1, align 4
   %3 = add i32 %rs1.v, %imm
-  %4 = alloca i32, align 4
-  store i32 %3, ptr %4, align 4
-  %.v = load i32, ptr %4, align 4
-  %5 = inttoptr i32 %.v to ptr
+  %4 = inttoptr i32 %3 to ptr
   %rs2.v = load i32, ptr %rs2, align 4
-  %6 = trunc i32 %rs2.v to i8
-  store i8 %6, ptr %5, align 1
+  %5 = trunc i32 %rs2.v to i8
+  store i8 %5, ptr %4, align 1
   ret void
 }
 
-define void @implSH(ptr %rs1, ptr %rs2, i32 %imm) {
-  %1 = and i32 %imm, 4095
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(write, argmem: readwrite)
+define void @implSH(ptr readonly captures(none) %rs1, ptr readonly captures(none) %rs2, i32 %imm) local_unnamed_addr #2 {
+  %1 = add i32 %imm, 2048
+  %2 = icmp ult i32 %1, 4096
+  tail call void @llvm.assume(i1 %2)
   %rs1.v = load i32, ptr %rs1, align 4
   %3 = add i32 %rs1.v, %imm
-  %4 = alloca i32, align 4
-  store i32 %3, ptr %4, align 4
-  %.v = load i32, ptr %4, align 4
-  %5 = inttoptr i32 %.v to ptr
+  %4 = inttoptr i32 %3 to ptr
   %rs2.v = load i32, ptr %rs2, align 4
-  %6 = trunc i32 %rs2.v to i16
-  store i16 %6, ptr %5, align 2
+  %5 = trunc i32 %rs2.v to i16
+  store i16 %5, ptr %4, align 2
   ret void
 }
 
-define void @implSW(ptr %rs1, ptr %rs2, i32 %imm) {
-  %1 = and i32 %imm, 4095
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(write, argmem: readwrite)
+define void @implSW(ptr readonly captures(none) %rs1, ptr readonly captures(none) %rs2, i32 %imm) local_unnamed_addr #2 {
+  %1 = add i32 %imm, 2048
+  %2 = icmp ult i32 %1, 4096
+  tail call void @llvm.assume(i1 %2)
   %rs1.v = load i32, ptr %rs1, align 4
   %3 = add i32 %rs1.v, %imm
-  %4 = alloca i32, align 4
-  store i32 %3, ptr %4, align 4
-  %.v = load i32, ptr %4, align 4
-  %5 = inttoptr i32 %.v to ptr
+  %4 = inttoptr i32 %3 to ptr
   %rs2.v = load i32, ptr %rs2, align 4
-  store i32 %rs2.v, ptr %5, align 4
+  store i32 %rs2.v, ptr %4, align 4
   ret void
 }
 
-attributes #0 = { nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }
-
+attributes #0 = { mustprogress nofree norecurse nosync nounwind willreturn memory(read, argmem: readwrite, inaccessiblemem: write) }
+attributes #1 = { mustprogress nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }
+attributes #2 = { mustprogress nofree norecurse nosync nounwind willreturn memory(write, argmem: readwrite) }
