@@ -55,8 +55,9 @@ static cl::opt<bool> SkipVerify("skip-verify",
                                 cl::cat(ToolOptions));
 static cl::opt<bool> PrintIR("print-ir", cl::desc("Print LLVM-IR module."),
                              cl::cat(ToolOptions));
-static cl::opt<bool> PrintMIR("print-mir", cl::desc("Print LLVM-MIR functions."),
-                             cl::cat(ToolOptions));
+static cl::opt<bool> PrintMIR("print-mir",
+                              cl::desc("Print LLVM-MIR functions."),
+                              cl::cat(ToolOptions));
 static cl::opt<bool> NoExtend(
     "no-extend",
     cl::desc("Do not apply CDSL typing rules (Use C-like type inference)."),

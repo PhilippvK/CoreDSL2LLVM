@@ -109,8 +109,8 @@ static void warning(const char *msg, TokenStream &ts) {
 
 #include "llvm/ADT/Twine.h"
 
-static void __attribute__((noreturn))
-error(const llvm::Twine &msg, TokenStream &ts) {
+static void __attribute__((noreturn)) error(const llvm::Twine &msg,
+                                            TokenStream &ts) {
   std::string s = msg.str(); // materialize once
   error(s.c_str(), ts);
 }
@@ -281,11 +281,13 @@ Value gen_subscript(TokenStream &ts, llvm::Function *func,
     llvm::Value *mask =
         (len == llLen)
             ? llvm::ConstantInt::get(upper.ll->getType(), 0)
-            : build.CreateShl(
-                              llvm::ConstantInt::get(llvm::Type::getIntNTy(ctx, len + 1), 1),
+            : build.CreateShl(llvm::ConstantInt::get(
+                                  llvm::Type::getIntNTy(ctx, len + 1), 1),
                               len);
     mask = build.CreateSub(mask, llvm::ConstantInt::get(mask->getType(), 1));
-    mask = (len < left.ll->getType()->getIntegerBitWidth()) ? build.CreateZExt(mask, left.ll->getType()) : ((build.CreateTrunc(mask, left.ll->getType())) ? : mask);
+    mask = (len < left.ll->getType()->getIntegerBitWidth())
+               ? build.CreateZExt(mask, left.ll->getType())
+               : ((build.CreateTrunc(mask, left.ll->getType())) ?: mask);
 
     left.ll = build.CreateAnd(left.ll, mask);
 
@@ -820,15 +822,15 @@ Value ParseExpressionTerminal(TokenStream &ts, llvm::Function *func,
     if (t.ident.str == "X" || t.ident.str == "XW") {
       bool sizeIs32 = t.ident.str == "XW";
       pop_cur(ts, ABrOpen);
-      if (ts.Peek().type == IntLiteral) {  // Handle X[0]
+      if (ts.Peek().type == IntLiteral) { // Handle X[0]
         auto idx = pop_cur(ts, IntLiteral);
         pop_cur(ts, ABrClose);
-        if (idx.literal.value == 0)  // X[0] -> 0
+        if (idx.literal.value == 0) // X[0] -> 0
           return Value(
-              llvm::ConstantInt::get(llvm::Type::getIntNTy(ctx, sizeIs32 ? 32 : xlen),
-                                     0, true),
+              llvm::ConstantInt::get(
+                  llvm::Type::getIntNTy(ctx, sizeIs32 ? 32 : xlen), 0, true),
               true);
-        else  // X[1],...
+        else // X[1],...
           not_implemented(ts);
       }
       auto ident = pop_cur(ts, Identifier).ident;
@@ -1193,12 +1195,11 @@ void ParseScope(TokenStream &ts, llvm::Function *func,
   pop_cur(ts, CBrClose);
 }
 
-
 struct AttrValue {
   enum Kind {
-    Bool,     // [[is_reg]]
-    Int,      // [[opcode=7'ha]]
-    String    // [[llvm_type="seal5_simm3"]]
+    Bool,  // [[is_reg]]
+    Int,   // [[opcode=7'ha]]
+    String // [[llvm_type="seal5_simm3"]]
   } kind;
 
   uint64_t intVal;
@@ -1219,7 +1220,6 @@ struct AttrValue {
     return a;
   }
 };
-
 
 using AttrMap = llvm::StringMap<AttrValue>;
 AttrMap ParseAttributes(TokenStream &ts) {
@@ -1248,7 +1248,7 @@ AttrMap ParseAttributes(TokenStream &ts) {
     auto ident = pop_cur(ts, Identifier).ident;
     std::string name = std::string{ident.str};
     std::transform(name.begin(), name.end(), name.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
+                   [](unsigned char c) { return std::tolower(c); });
     AttrValue value = AttrValue::makeBool();
     if (pop_cur_if(ts, Assignment)) {
       auto tok = ts.Pop();
@@ -1294,7 +1294,8 @@ AttrMap ParseAttributes(TokenStream &ts) {
   // return (CDSLInstr::FieldType)acc;
 }
 
-void ApplyOperandAttributes(const AttrMap &attrs, CDSLInstr::Field &op, TokenStream &ts) {
+void ApplyOperandAttributes(const AttrMap &attrs, CDSLInstr::Field &op,
+                            TokenStream &ts) {
   using FT = CDSLInstr::FieldType;
 
   int type = op.type;
@@ -1322,12 +1323,11 @@ void ApplyOperandAttributes(const AttrMap &attrs, CDSLInstr::Field &op, TokenStr
       if (val.kind != AttrValue::String)
         error("llvm_type must be a string", ts);
       op.llvm_type = val.strVal;
-    // } else if (name == "reg_class") {
-    //   op.regClass = val.strVal;
+      // } else if (name == "reg_class") {
+      //   op.regClass = val.strVal;
     } else {
       warning("unknown operand attribute: " + name, ts);
     }
-
   }
   op.type = (CDSLInstr::FieldType)type;
 }
@@ -1337,7 +1337,8 @@ void ParseOperandAttributes(TokenStream &ts, CDSLInstr::Field &op) {
   ApplyOperandAttributes(attrs, op, ts);
 }
 
-void ApplyInstructionAttributes(const AttrMap &attrs, CDSLInstr &instr, TokenStream &ts) {
+void ApplyInstructionAttributes(const AttrMap &attrs, CDSLInstr &instr,
+                                TokenStream &ts) {
   for (auto &kv : attrs) {
     auto name = kv.first();
     auto &val = kv.second;
@@ -1371,14 +1372,16 @@ void ParseOperands(TokenStream &ts, CDSLInstr &instr) {
   while (peek_is_type(ts)) {
     auto vd = ParseDefinition(ts);
 
-    CDSLInstr::Field op = CDSLInstr::Field{.len = (uint8_t)vd.bitSize,
-                          .ident = vd.ident,
-                          .identIdx = vd.identIdx,
-                          .type = CDSLInstr::FieldType::NON_CONST};
+    CDSLInstr::Field op =
+        CDSLInstr::Field{.len = (uint8_t)vd.bitSize,
+                         .ident = vd.ident,
+                         .identIdx = vd.identIdx,
+                         .type = CDSLInstr::FieldType::NON_CONST};
 
     ParseOperandAttributes(ts, op);
 
-    op.type = (CDSLInstr::FieldType)((op.type & ~CDSLInstr::SIGNED) | (vd.sgn ? CDSLInstr::SIGNED : 0));
+    op.type = (CDSLInstr::FieldType)((op.type & ~CDSLInstr::SIGNED) |
+                                     (vd.sgn ? CDSLInstr::SIGNED : 0));
 
     instr.fields.push_back(op);
 
@@ -1404,8 +1407,8 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
       uint32_t val = litT.literal.value;
       offset -= len;
       // Create field with 0xFF placeholder index
-      instr.frags.push_back(
-          CDSLInstr::FieldFrag{0xFF, len, (uint8_t)offset, (uint8_t)offset, val});
+      instr.frags.push_back(CDSLInstr::FieldFrag{0xFF, len, (uint8_t)offset,
+                                                 (uint8_t)offset, val});
       break;
     }
     case Identifier: {
@@ -1483,8 +1486,8 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
   instr.size = size;
 
   // Rather than splitting up the constant bits of the instruction into multiple
-  // fields, we use one trailing constant field of size 32/48. FieldFragments can
-  // index into relevant sections of this single field.
+  // fields, we use one trailing constant field of size 32/48. FieldFragments
+  // can index into relevant sections of this single field.
   instr.fields.push_back(CDSLInstr::Field{
       .len = size, .constV = 0, .type = CDSLInstr::FieldType::CONST});
   if (instr.fields.size() > 255)
@@ -1517,7 +1520,8 @@ void ParseArguments(TokenStream &ts, CDSLInstr &instr) {
     strNew =
         std::regex_replace(str, std::regex("\\{" + fstr + "\\}"), "$" + fstr);
     if (strNew != str)
-      f.type = (CDSLInstr::FieldType)(f.type | CDSLInstr::FieldType::IMM | CDSLInstr::FieldType::IN);
+      f.type = (CDSLInstr::FieldType)(f.type | CDSLInstr::FieldType::IMM |
+                                      CDSLInstr::FieldType::IN);
     str = strNew;
   }
 
@@ -1531,7 +1535,7 @@ void ParseAssembly(TokenStream &ts, CDSLInstr &instr) {
   std::string mnemonic = instr.name;
   std::replace(mnemonic.begin(), mnemonic.end(), '_', '.');
   std::transform(mnemonic.begin(), mnemonic.end(), mnemonic.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
+                 [](unsigned char c) { return std::tolower(c); });
 
   if (pop_cur_if(ts, CBrOpen)) {
     mnemonic = std::string(pop_cur(ts, StringLiteral).strLit.str);

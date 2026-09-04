@@ -12,9 +12,9 @@ more aggressively directly.
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/CodeGen/GlobalISel/CSEInfo.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/CodeGen/FunctionLoweringInfo.h"
+#include "llvm/CodeGen/GlobalISel/CSEInfo.h"
 #include "llvm/CodeGen/GlobalISel/IRTranslator.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
 #include "llvm/CodeGen/GlobalISel/Legalizer.h"
@@ -114,7 +114,6 @@ static void initializeDefaultRVVRegisterAllocatorOnce() {
   }
 }
 
-
 static FunctionPass *createBasicRVVRegisterAllocator() {
   return createBasicRegisterAllocator(onlyAllocateRVVReg);
 }
@@ -151,8 +150,7 @@ public:
     return getTM<RISCVTargetMachine>();
   }
 
-  ScheduleDAGInstrs *
-  createMachineScheduler(MachineSchedContext *C) const {
+  ScheduleDAGInstrs *createMachineScheduler(MachineSchedContext *C) const {
     ScheduleDAGMILive *DAG = createSchedLive(C);
     if (EnableMISchedLoadStoreClustering) {
       DAG->addMutation(createLoadClusterDAGMutation(
@@ -168,8 +166,7 @@ public:
     return DAG;
   }
 
-  ScheduleDAGInstrs *
-  createPostMachineScheduler(MachineSchedContext *C) const {
+  ScheduleDAGInstrs *createPostMachineScheduler(MachineSchedContext *C) const {
     ScheduleDAGMI *DAG = createSchedPostRA(C);
     if (EnablePostMISchedLoadStoreClustering) {
       DAG->addMutation(createLoadClusterDAGMutation(
@@ -403,13 +400,11 @@ void RISCVPassConfig::addFastRegAlloc() {
   TargetPassConfig::addFastRegAlloc();
 }
 
-
 void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOptLevel::None &&
       EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
 }
-
 
 class RISCVPatternPassConfig : public RISCVPassConfig {
 public:
@@ -605,7 +600,7 @@ int runPatternGenPipeline(llvm::Module *M, bool Is64Bit, std::string Mattr) {
     // LLVMTargetMachine &LLVMTM = static_cast<LLVMTargetMachine &>(*Target);
     MachineModuleInfoWrapperPass *MMIWP =
         new MachineModuleInfoWrapperPass(Target.get());
-        // new MachineModuleInfoWrapperPass(&LLVMTM);
+    // new MachineModuleInfoWrapperPass(&LLVMTM);
 
     // Construct a custom pass pipeline that starts after instruction
     // selection.
