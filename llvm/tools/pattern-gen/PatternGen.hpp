@@ -4,15 +4,16 @@
 #include "llvm/Support/CodeGen.h"
 #include <llvm/IR/Module.h>
 
-struct PGArgsStruct
-{
-    std::string Mattr;
-    llvm::CodeGenOptLevel OptLevel;
-    std::string Predicates;
-    bool Is64Bit;
-    bool DumpMIR;
+struct PGArgsStruct {
+  std::string Mattr;
+  llvm::CodeGenOptLevel OptLevel;
+  std::string Predicates;
+  bool Is64Bit;
+  bool DumpMIR;
 };
 
-int optimizeBehavior(llvm::Module* M, std::vector<CDSLInstr> const& Instrs, std::ostream& OstreamIR, PGArgsStruct Args);
-int generatePatterns(llvm::Module* M, std::vector<CDSLInstr> const& Instrs, std::ostream& Ostream, PGArgsStruct Args);
-//void PrintPattern(llvm::SelectionDAG& DAG);
+int optimizeBehavior(llvm::Module *M, std::vector<CDSLInstr> const &Instrs,
+                     std::ostream &OstreamIR, PGArgsStruct Args);
+int generatePatterns(llvm::Module *M, std::vector<CDSLInstr> const &Instrs,
+                     std::ostream &Ostream, PGArgsStruct Args);
+// void PrintPattern(llvm::SelectionDAG& DAG);
