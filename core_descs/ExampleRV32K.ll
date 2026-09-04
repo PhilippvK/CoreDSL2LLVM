@@ -1,86 +1,57 @@
 ; ModuleID = 'mod'
 source_filename = "mod"
+target datalayout = "e-m:e-p:32:32-i64:64-n32-S128"
+target triple = "riscv32-unknown-linux-gnu"
 
-define void @implK_LLI(i32 %imm, ptr noalias %rd) {
-  %1 = and i32 %imm, -1
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
-  br i1 true, label %3, label %4
-
-3:                                                ; preds = %0
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: write)
+define void @implK_LLI(i32 %imm, ptr noalias nocapture writeonly initializes((0, 4)) %rd) local_unnamed_addr #0 {
   store i32 %imm, ptr %rd, align 4
-  br label %4
-
-4:                                                ; preds = %3, %0
   ret void
 }
 
-; Function Attrs: nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)
-declare void @llvm.assume(i1 noundef) #0
+; Function Attrs: mustprogress nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)
+declare void @llvm.assume(i1 noundef) #1
 
-define void @implK_ADDI(i32 %imm, ptr %rs1, ptr noalias %rd) {
-  %1 = and i32 %imm, 16777215
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
-  br i1 true, label %3, label %5
-
-3:                                                ; preds = %0
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite, inaccessiblemem: write)
+define void @implK_ADDI(i32 %imm, ptr nocapture readonly %rs1, ptr noalias nocapture writeonly initializes((0, 4)) %rd) local_unnamed_addr #2 {
+  %1 = icmp ult i32 %imm, 16777216
+  tail call void @llvm.assume(i1 %1)
   %rs1.v = load i32, ptr %rs1, align 4
-  %4 = add i32 %rs1.v, %imm
-  store i32 %4, ptr %rd, align 4
-  br label %5
-
-5:                                                ; preds = %3, %0
+  %2 = add i32 %rs1.v, %imm
+  store i32 %2, ptr %rd, align 4
   ret void
 }
 
-define void @implK_ANDI(i32 %imm, ptr %rs1, ptr noalias %rd) {
-  %1 = and i32 %imm, 16777215
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
-  br i1 true, label %3, label %5
-
-3:                                                ; preds = %0
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite, inaccessiblemem: write)
+define void @implK_ANDI(i32 %imm, ptr nocapture readonly %rs1, ptr noalias nocapture writeonly initializes((0, 4)) %rd) local_unnamed_addr #2 {
+  %1 = icmp ult i32 %imm, 16777216
+  tail call void @llvm.assume(i1 %1)
   %rs1.v = load i32, ptr %rs1, align 4
-  %4 = and i32 %rs1.v, %imm
-  store i32 %4, ptr %rd, align 4
-  br label %5
-
-5:                                                ; preds = %3, %0
+  %2 = and i32 %rs1.v, %imm
+  store i32 %2, ptr %rd, align 4
   ret void
 }
 
-define void @implK_XORI(i32 %imm, ptr %rs1, ptr noalias %rd) {
-  %1 = and i32 %imm, 16777215
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
-  br i1 true, label %3, label %5
-
-3:                                                ; preds = %0
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite, inaccessiblemem: write)
+define void @implK_XORI(i32 %imm, ptr nocapture readonly %rs1, ptr noalias nocapture writeonly initializes((0, 4)) %rd) local_unnamed_addr #2 {
+  %1 = icmp ult i32 %imm, 16777216
+  tail call void @llvm.assume(i1 %1)
   %rs1.v = load i32, ptr %rs1, align 4
-  %4 = xor i32 %rs1.v, %imm
-  store i32 %4, ptr %rd, align 4
-  br label %5
-
-5:                                                ; preds = %3, %0
+  %2 = xor i32 %rs1.v, %imm
+  store i32 %2, ptr %rd, align 4
   ret void
 }
 
-define void @implK_ORI(i32 %imm, ptr %rs1, ptr noalias %rd) {
-  %1 = and i32 %imm, 16777215
-  %2 = icmp eq i32 %imm, %1
-  call void @llvm.assume(i1 %2)
-  br i1 true, label %3, label %5
-
-3:                                                ; preds = %0
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite, inaccessiblemem: write)
+define void @implK_ORI(i32 %imm, ptr nocapture readonly %rs1, ptr noalias nocapture writeonly initializes((0, 4)) %rd) local_unnamed_addr #2 {
+  %1 = icmp ult i32 %imm, 16777216
+  tail call void @llvm.assume(i1 %1)
   %rs1.v = load i32, ptr %rs1, align 4
-  %4 = or i32 %rs1.v, %imm
-  store i32 %4, ptr %rd, align 4
-  br label %5
-
-5:                                                ; preds = %3, %0
+  %2 = or i32 %rs1.v, %imm
+  store i32 %2, ptr %rd, align 4
   ret void
 }
 
-attributes #0 = { nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }
-
+attributes #0 = { mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: write) }
+attributes #1 = { mustprogress nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }
+attributes #2 = { mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite, inaccessiblemem: write) }

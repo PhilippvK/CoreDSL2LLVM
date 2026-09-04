@@ -1,63 +1,52 @@
 ; ModuleID = 'mod'
 source_filename = "mod"
+target datalayout = "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128"
+target triple = "riscv64-unknown-linux-gnu"
 
-define void @implCV_SUBINCACC(ptr %rs2, ptr %rs1, ptr noalias %rd) {
-  br i1 true, label %1, label %5
-
-1:                                                ; preds = %0
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite)
+define void @implCV_SUBINCACC(ptr nocapture readonly %rs2, ptr nocapture readonly %rs1, ptr noalias nocapture %rd) local_unnamed_addr #0 {
   %rs1.v = load i64, ptr %rs1, align 8
   %rs2.v = load i64, ptr %rs2, align 8
-  %2 = sub i64 %rs1.v, %rs2.v
-  %3 = add i64 %2, 1
   %rd.v = load i64, ptr %rd, align 8
-  %4 = add i64 %rd.v, %3
-  store i64 %4, ptr %rd, align 8
-  br label %5
-
-5:                                                ; preds = %1, %0
-  ret void
-}
-
-define void @implCV_MAXU(ptr %rs2, ptr %rs1, ptr noalias %rd) {
-  br i1 true, label %1, label %5
-
-1:                                                ; preds = %0
-  %rs1.v = load i64, ptr %rs1, align 8
-  %rs2.v = load i64, ptr %rs2, align 8
-  %2 = icmp ugt i64 %rs1.v, %rs2.v
-  %rs1.v1 = load i64, ptr %rs1, align 8
-  %rs2.v2 = load i64, ptr %rs2, align 8
-  %3 = icmp ne i1 %2, false
-  %4 = select i1 %3, i64 %rs1.v1, i64 %rs2.v2
-  store i64 %4, ptr %rd, align 8
-  br label %5
-
-5:                                                ; preds = %1, %0
-  ret void
-}
-
-define void @implNAND(ptr %rs2, ptr %rs1, ptr noalias %rd) {
-  br i1 true, label %1, label %4
-
-1:                                                ; preds = %0
-  %rs1.v = load i64, ptr %rs1, align 8
-  %rs2.v = load i64, ptr %rs2, align 8
-  %2 = and i64 %rs1.v, %rs2.v
-  %3 = xor i64 %2, -1
+  %1 = add i64 %rs1.v, 1
+  %2 = sub i64 %1, %rs2.v
+  %3 = add i64 %2, %rd.v
   store i64 %3, ptr %rd, align 8
-  br label %4
-
-4:                                                ; preds = %1, %0
   ret void
 }
 
-define void @implADD3(ptr %rs2, ptr %rs1, ptr noalias %rd) {
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite)
+define void @implCV_MAXU(ptr nocapture readonly %rs2, ptr nocapture readonly %rs1, ptr noalias nocapture writeonly initializes((0, 8)) %rd) local_unnamed_addr #0 {
   %rs1.v = load i64, ptr %rs1, align 8
   %rs2.v = load i64, ptr %rs2, align 8
-  %1 = add i64 %rs1.v, %rs2.v
-  %rd.v = load i64, ptr %rd, align 8
-  %2 = add i64 %rd.v, %1
+  %1 = tail call i64 @llvm.umax.i64(i64 %rs1.v, i64 %rs2.v)
+  store i64 %1, ptr %rd, align 8
+  ret void
+}
+
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite)
+define void @implNAND(ptr nocapture readonly %rs2, ptr nocapture readonly %rs1, ptr noalias nocapture writeonly initializes((0, 8)) %rd) local_unnamed_addr #0 {
+  %rs1.v = load i64, ptr %rs1, align 8
+  %rs2.v = load i64, ptr %rs2, align 8
+  %1 = and i64 %rs2.v, %rs1.v
+  %2 = xor i64 %1, -1
   store i64 %2, ptr %rd, align 8
   ret void
 }
 
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite)
+define void @implADD3(ptr nocapture readonly %rs2, ptr nocapture readonly %rs1, ptr noalias nocapture %rd) local_unnamed_addr #0 {
+  %rs1.v = load i64, ptr %rs1, align 8
+  %rs2.v = load i64, ptr %rs2, align 8
+  %1 = add i64 %rs2.v, %rs1.v
+  %rd.v = load i64, ptr %rd, align 8
+  %2 = add i64 %1, %rd.v
+  store i64 %2, ptr %rd, align 8
+  ret void
+}
+
+; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare i64 @llvm.umax.i64(i64, i64) #1
+
+attributes #0 = { mustprogress nofree norecurse nosync nounwind willreturn memory(argmem: readwrite) }
+attributes #1 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
