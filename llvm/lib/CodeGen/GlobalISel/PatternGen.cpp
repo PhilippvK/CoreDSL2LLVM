@@ -66,7 +66,8 @@ STATISTIC(PatternGenNumErrorFormatImm, "Errors of type: FORMAT_IMM");
 STATISTIC(PatternGenNumErrorFormat, "Errors of type: FORMAT");
 STATISTIC(PatternGenNumErrorMultipleStores, "Errors of type: MULTIPLE STORES");
 STATISTIC(PatternGenNumErrorUnusedOperand, "Errors of type: UNUSED_OPERAND");
-STATISTIC(PatternGenNumErrorOperandMissmatch, "Errors of type: OPERAND_MISSMATCH");
+STATISTIC(PatternGenNumErrorOperandMissmatch,
+          "Errors of type: OPERAND_MISSMATCH");
 
 #ifdef LLVM_GISEL_COV_PREFIX
 static cl::opt<std::string>
@@ -94,7 +95,7 @@ struct PatternArg {
 
 static CDSLInstr const *CurInstr = nullptr;
 static SmallVector<PatternArg, 8> PatternArgs;
-static bool HasSideEffects = 0;  // TODO: get from parser attrs
+static bool HasSideEffects = 0; // TODO: get from parser attrs
 static bool MayLoad = 0;
 static bool MayStore = 0;
 
@@ -351,8 +352,8 @@ struct SextInregNode : public PatternNode {
     std::string TypeStr = lltToString(Type);
     std::string MaskStr = "";
 
-    std::string OpString = "(sext_inreg " + First->patternString() +
-                           ", i" + std::to_string(Bit) + ")";
+    std::string OpString = "(sext_inreg " + First->patternString() + ", i" +
+                           std::to_string(Bit) + ")";
 
     // Explicitly specifying types for all ops increases pattern compile time
     // significantly, so we only do for ops where deduction fails otherwise.
@@ -621,7 +622,8 @@ struct UnopNode : public PatternNode {
     std::string TypeStr = lltToString(Type);
 
     // ignore bitcast ops for now
-    if ((Op == TargetOpcode::G_BITCAST) || (Op == TargetOpcode::G_CONSTANT_FOLD_BARRIER))
+    if ((Op == TargetOpcode::G_BITCAST) ||
+        (Op == TargetOpcode::G_CONSTANT_FOLD_BARRIER))
       return Operand->patternString();
 
     return "(" + TypeStr + " (" + std::string(UnopStr.at(Op)) + " " +
@@ -629,7 +631,8 @@ struct UnopNode : public PatternNode {
   }
 
   LLT getRegisterTy(int OperandId) const override {
-    if (OperandId == -1 && Op != TargetOpcode::G_BITCAST && Op != TargetOpcode::G_CONSTANT_FOLD_BARRIER)
+    if (OperandId == -1 && Op != TargetOpcode::G_BITCAST &&
+        Op != TargetOpcode::G_CONSTANT_FOLD_BARRIER)
       return Type;
     return Operand->getRegisterTy(OperandId);
   }
@@ -985,21 +988,23 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
   }
   if (AddrI->getOpcode() == TargetOpcode::G_SELECT) {
     assert(AddrI->getOperand(1).isReg() && "expected register");
-    auto CondInstr  = AddrI->getOperand(1);
-    auto CondReg  = CondInstr.getReg();
+    auto CondInstr = AddrI->getOperand(1);
+    auto CondReg = CondInstr.getReg();
     auto [ErrCond, CondNode] = traverse(MRI, *MRI.getVRegDef(CondReg));
     if (ErrCond)
       return PError(ErrCond);
     assert(AddrI->getOperand(2).isReg() && "expected register");
-    auto TrueInstr  = AddrI->getOperand(2);
-    auto TrueReg  = TrueInstr.getReg();
-    auto [ErrTrue, TrueNode] = traverseRegLoad(MRI, Cur, ReadSize, MRI.getVRegDef(TrueReg));
+    auto TrueInstr = AddrI->getOperand(2);
+    auto TrueReg = TrueInstr.getReg();
+    auto [ErrTrue, TrueNode] =
+        traverseRegLoad(MRI, Cur, ReadSize, MRI.getVRegDef(TrueReg));
     if (ErrTrue)
       return PError(ErrTrue);
     assert(AddrI->getOperand(3).isReg() && "expected register");
-    auto FalseInstr  = AddrI->getOperand(3);
-    auto FalseReg  = FalseInstr.getReg();
-    auto [ErrFalse, FalseNode] = traverseRegLoad(MRI, Cur, ReadSize, MRI.getVRegDef(FalseReg));
+    auto FalseInstr = AddrI->getOperand(3);
+    auto FalseReg = FalseInstr.getReg();
+    auto [ErrFalse, FalseNode] =
+        traverseRegLoad(MRI, Cur, ReadSize, MRI.getVRegDef(FalseReg));
     if (ErrFalse)
       return PError(ErrFalse);
     auto Node = std::make_unique<TernopNode>(
@@ -1026,7 +1031,8 @@ static PatternOrError traverseRegLoad(MachineRegisterInfo &MRI,
 
   assert(Cur.getOperand(0).isReg() && "expected register");
   std::unique_ptr<PatternNode> Node = std::make_unique<RegisterNode>(
-      Type, Field->ident, Idx, false, Type.getSizeInBits(), false, Field->llvm_type);
+      Type, Field->ident, Idx, false, Type.getSizeInBits(), false,
+      Field->llvm_type);
 
   bool SizeMismatch = (int)Type.getSizeInBits() != ReadSize;
 
@@ -1208,17 +1214,18 @@ static PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
 
       PatternArgs[Idx].In = true;
       PatternArgs[Idx].Llt = LLT();
-      PatternArgs[Idx].ArgTypeStr =
-          makeImmTypeStr(Field->len, Field->type & CDSLInstr::SIGNED, Field->llvm_type);
+      PatternArgs[Idx].ArgTypeStr = makeImmTypeStr(
+          Field->len, Field->type & CDSLInstr::SIGNED, Field->llvm_type);
 
       if (Field == nullptr)
         return std::make_pair(FORMAT_IMM, nullptr);
 
       assert(Cur.getOperand(0).isReg() && "expected register");
       return std::make_pair(
-          SUCCESS, std::make_unique<RegisterNode>(
-                       MRI.getType(Cur.getOperand(0).getReg()), Field->ident,
-                       Idx, true, Field->len, Field->type & CDSLInstr::SIGNED, Field->llvm_type));
+          SUCCESS,
+          std::make_unique<RegisterNode>(
+              MRI.getType(Cur.getOperand(0).getReg()), Field->ident, Idx, true,
+              Field->len, Field->type & CDSLInstr::SIGNED, Field->llvm_type));
     }
 
     // Else COPY is just a pass-through.
@@ -1336,7 +1343,7 @@ static PatternOrError traverseMemStore(LLT Type, MachineRegisterInfo &MRI,
                                        MachineInstr &Addr) {
   // Starting with LLVM20, there will be a G_TRUNC before G_STORE for s8, s16
   // TODO: check if pattern matches
-  MachineInstr &ValMI = [&]() -> MachineInstr& {
+  MachineInstr &ValMI = [&]() -> MachineInstr & {
     if (Value.getOpcode() == TargetOpcode::G_TRUNC) {
       Register SrcReg = Value.getOperand(1).getReg();
       return *MRI.getVRegDef(SrcReg);
@@ -1447,7 +1454,6 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   std::string LLVMInstr = CurInstr->llvm_instr;
   std::string InstNameO = LLVMInstr.empty() ? InstName : LLVMInstr;
 
-
   // We use the PatternArgs vector to store additional information
   // about parameters that may be found during pattern gen.
   PatternArgs.clear();
@@ -1474,22 +1480,25 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
 
     // handle unused operands
     if (!PatternArgs[I].In && !PatternArgs[I].Out) {
-        llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
-                     << "Operand '" << CurInstr->fields[I].ident << "' not used in pattern!\n";
-        ++PatternGenNumErrorUnusedOperand;
-        return true;
+      llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
+                   << "Operand '" << CurInstr->fields[I].ident
+                   << "' not used in pattern!\n";
+      ++PatternGenNumErrorUnusedOperand;
+      return true;
     }
 
     // check for missmatches between operands
     if ((CurInstr->fields[I].type & CDSLInstr::IN) && !PatternArgs[I].In) {
       llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
-                   << "Operand '" << CurInstr->fields[I].ident << "' should be an input!\n";
+                   << "Operand '" << CurInstr->fields[I].ident
+                   << "' should be an input!\n";
       ++PatternGenNumErrorOperandMissmatch;
       return true;
     }
     if ((CurInstr->fields[I].type & CDSLInstr::OUT) && !PatternArgs[I].Out) {
       llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
-                   << "Operand '" << CurInstr->fields[I].ident << "' should be an output!\n";
+                   << "Operand '" << CurInstr->fields[I].ident
+                   << "' should be an output!\n";
       ++PatternGenNumErrorOperandMissmatch;
       return true;
     }
@@ -1509,10 +1518,9 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  llvm::outs() << "Pattern for " << InstName << " [" << InstMnemonic << "]: " << Node->patternString()
-               << '\n';
+  llvm::outs() << "Pattern for " << InstName << " [" << InstMnemonic
+               << "]: " << Node->patternString() << '\n';
   ++PatternGenNumPatternsGenerated;
-
 
   InsString = InsString.substr(0, InsString.size() - 2);
   OutsString = OutsString.substr(0, OutsString.size() - 2);
