@@ -33,13 +33,13 @@ def : Pat<
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, isCodeGenOnly = 1, Constraints = "" in def SB_ : RVInst_SB<(outs ), (ins GPR:$rs1, GPR:$rs2, simm12:$imm)>;
 
 def : Pat<
-	(truncstorei8 (XLenVT (i16 (trunc GPR:$rs2))), (iPTR (ptradd (iPTR (iPTR GPR:$rs1)), (i32 (i32 simm12:$imm))))),
+	(truncstorei8 (XLenVT GPR:$rs2), (iPTR (ptradd (iPTR (iPTR GPR:$rs1)), (i32 (i32 simm12:$imm))))),
 	(SB_ GPR:$rs1, GPR:$rs2, simm12:$imm)>;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, isCodeGenOnly = 1, Constraints = "" in def SH_ : RVInst_SH<(outs ), (ins GPR:$rs1, GPR:$rs2, simm12:$imm)>;
 
 def : Pat<
-	(truncstorei16 (XLenVT (i16 (trunc GPR:$rs2))), (iPTR (ptradd (iPTR (iPTR GPR:$rs1)), (i32 (i32 simm12:$imm))))),
+	(truncstorei16 (XLenVT GPR:$rs2), (iPTR (ptradd (iPTR (iPTR GPR:$rs1)), (i32 (i32 simm12:$imm))))),
 	(SH_ GPR:$rs1, GPR:$rs2, simm12:$imm)>;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1, isBranch = 0, isTerminator = 0, isCodeGenOnly = 1, Constraints = "" in def SW_ : RVInst_SW<(outs ), (ins GPR:$rs1, GPR:$rs2, simm12:$imm)>;
