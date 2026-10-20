@@ -1155,6 +1155,13 @@ def HasStdExtSvinval : Predicate<"Subtarget->hasStdExtSvinval()">,
                        AssemblerPredicate<(all_of FeatureStdExtSvinval),
                            "'Svinval' (Fine-Grained Address-Translation Cache Invalidation)">;
 
+def FeatureGPR32V
+   : SubtargetFeature<"gpr32v", "HasGPR32V", "true", "Support SIMD in 32-bit GPRs">;
+def HasGPR32V
+   : Predicate<"Subtarget->hasGPR32V)">,
+     AssemblerPredicate<(any_of FeatureGPR32V),
+                        "'GPR32V' (TODO)">;
+
 def FeatureStdExtSvnapot
     : RISCVExtension<1, 0, "NAPOT Translation Contiguity">;
 
@@ -1567,7 +1574,7 @@ def HasVendorXCValu
                          "'XCValu' (CORE-V ALU Operations)">;
 
 def FeatureVendorXCVsimd
-    : RISCVExtension<1, 0, "CORE-V SIMD ALU">;
+    : RISCVExtension<1, 0, "CORE-V SIMD ALU", [FeatureGPR32V]>;
 def HasVendorXCVsimd
     : Predicate<"Subtarget->hasVendorXCVsimd()">,
       AssemblerPredicate<(any_of FeatureVendorXCVsimd),

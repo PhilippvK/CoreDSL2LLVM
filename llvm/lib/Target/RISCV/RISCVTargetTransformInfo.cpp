@@ -399,8 +399,9 @@ RISCVTTIImpl::getRegisterBitWidth(TargetTransformInfo::RegisterKind K) const {
   case TargetTransformInfo::RGK_Scalar:
     return TypeSize::getFixed(ST->getXLen());
   case TargetTransformInfo::RGK_FixedWidthVector:
-    return TypeSize::getFixed(
-        ST->useRVVForFixedLengthVectors() ? LMUL * ST->getRealMinVLen() : 0);
+    return TypeSize::getFixed(ST->useRVVForFixedLengthVectors()
+                                  ? LMUL * ST->getRealMinVLen()
+                                  : (ST->hasGPR32V() ? 32 : 0));
   case TargetTransformInfo::RGK_ScalableVector:
     return TypeSize::getScalable(
         (ST->hasVInstructions() &&
@@ -690,7 +691,7 @@ RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind, VectorType *DstTy,
   // TODO: Add proper cost model for P extension fixed vectors (e.g., v4i16)
   // For now, skip all fixed vector cost analysis when P extension is available
   // to avoid crashes in getMinRVVVectorSizeInBits()
-  if (ST->hasStdExtP() && isa<FixedVectorType>(SrcTy))
+  if (ST->hasGPR32V() || (ST->hasStdExtP() && isa<FixedVectorType>(SrcTy)))
     return 1;
 
   std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(SrcTy);
@@ -2328,7 +2329,7 @@ InstructionCost RISCVTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
                                               const Instruction *I) const {
   EVT VT = TLI->getValueType(DL, Src, true);
   // Type legalization can't handle structs, and load latency isn't handled here
-  if (VT == MVT::Other ||
+  if (VT == MVT::Other || ST->hasGPR32V() ||
       (Opcode == Instruction::Load && CostKind == TTI::TCK_Latency))
     return BaseT::getMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
                                   CostKind, OpInfo, I);

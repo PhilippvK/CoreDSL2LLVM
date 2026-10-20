@@ -857,3 +857,9 @@ let Predicates = [HasVendorXCVmac, IsRV32] in {
   def : PatCoreVMacGprGprGprUimm5<"macsRN", "MACSRN">;
   def : PatCoreVMacGprGprGprUimm5<"machhsRN", "MACHHSRN">;
 }
+
+include "XCoreVSIMDInstrFormat.td"
+include "XCoreVSIMD.td"
+include "XCoreVALUInstrFormat.td"
+include "XCoreVALU.td"
+include "XCoreVSIMD_manual.td"
