@@ -82,14 +82,16 @@ static void reset_globals() {
 static void create_var_scope() { scopeDepth++; }
 
 static void pop_var_scope() {
-  for (auto it = variables.begin(); it != variables.end();) {
-    auto &[vname, vstack] = *it++;
+  llvm::SmallVector<uint32_t> expired;
+  for (auto &[vname, vstack] : variables) {
     assert(!vstack.empty());
     if (vstack.back().scope == scopeDepth)
       vstack.pop_back();
     if (vstack.empty())
-      variables.erase(vname);
+      expired.push_back(vname);
   }
+  for (uint32_t vname : expired)
+    variables.erase(vname);
   scopeDepth--;
 }
 
@@ -1073,7 +1075,7 @@ void ParseDeclaration(TokenStream &ts, llvm::Function *func,
   v.isLValue = true;
   {
     llvm::BasicBlock *cur = build.GetInsertBlock();
-    if (entry->getTerminator() == nullptr)
+    if (!entry->hasTerminator())
       build.SetInsertPoint(entry);
     else
       build.SetInsertPoint(entry->getTerminator());
