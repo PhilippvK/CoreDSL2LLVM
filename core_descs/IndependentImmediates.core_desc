@@ -1,0 +1,25 @@
+// RUN: pattern-gen %s --riscv-xlen 32 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --riscv-xlen 64 -o %t.td | FileCheck %s
+// RUN: FileCheck --check-prefix=TD %s < %t.td
+// RUN: FileCheck --check-prefix=FMT %s < %tInstrFormat.td
+
+// CHECK: Pattern for PG_SPECIAL_0_n1
+// CHECK: Pattern for PG_SPECIAL_0_0
+// CHECK: Pattern for PG_SPECIAL_1_n1
+// CHECK: Pattern for PG_SPECIAL_1_0
+// TD-COUNT-1: def PG_SPECIAL_ : RVInst_PG_SPECIAL
+// TD: (PG_SPECIAL_ 0, -1, GPR:$rs1)>;
+// TD: (PG_SPECIAL_ 0, 0, GPR:$rs1)>;
+// TD: (PG_SPECIAL_ 1, -1, GPR:$rs1)>;
+// TD: (PG_SPECIAL_ 1, 0, GPR:$rs1)>;
+// FMT-COUNT-1: class RVInst_PG_SPECIAL<
+
+PG_SPECIAL {
+    operands: {
+        unsigned<1> first [[is_unroll_imm]];
+        signed<1> second [[is_unroll_imm]] [[llvm_type = "simm5"]];
+    }
+    encoding: 7'b0000000 :: first[0:0] :: second[0:0] :: 3'b000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}, {first}, {second}";
+    behavior: { X[rd] = X[rs1] + (first + 1) + (second + 2); }
+}

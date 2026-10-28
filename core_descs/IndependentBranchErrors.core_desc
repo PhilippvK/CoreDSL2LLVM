@@ -1,0 +1,24 @@
+// RUN: not pattern-gen %s -o %t.td 2>&1 | FileCheck %s
+// RUN: pattern-gen %s -f -o %t.td 2>&1 | FileCheck %s
+// CHECK: branch offset must use the RISC-V B-format bit layout
+// CHECK: Pattern Generation failed for implPG_BRANCH_STORE
+// CHECK: Pattern Generation failed for implPG_STORE_BRANCH
+
+PG_BAD_LAYOUT {
+    operands: { signed<13> offset [[is_branch_offs]]; }
+    encoding: offset[12:0] :: rs1[4:0] :: 7'b0000000 :: 7'b0101011;
+    assembly: "{name(rs1)}, {offset}";
+    behavior: { branch(X[rs1]); }
+}
+PG_BRANCH_STORE {
+    operands: { signed<13> offset [[is_branch_offs]]; }
+    encoding: offset[12:12] :: offset[10:5] :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: offset[4:1] :: offset[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {name(rs2)}, {offset}";
+    behavior: { branch(X[rs1]); MEMX[X[rs1]] = X[rs2]; }
+}
+PG_STORE_BRANCH {
+    operands: { signed<13> offset [[is_branch_offs]]; }
+    encoding: offset[12:12] :: offset[10:5] :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: offset[4:1] :: offset[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {name(rs2)}, {offset}";
+    behavior: { MEMX[X[rs1]] = X[rs2]; branch(X[rs1]); }
+}

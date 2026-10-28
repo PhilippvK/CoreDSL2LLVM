@@ -1,0 +1,57 @@
+// RUN: pattern-gen %s --riscv-xlen 32 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --riscv-xlen 64 -o %t.td | FileCheck %s
+
+// CHECK: Pattern for PG_L8 [
+PG_L8 {
+    encoding: 7'd0 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = (unsigned<8>)MEM8[X[rs1]]; }
+}
+// CHECK: Pattern for PG_L8S [
+PG_L8S {
+    encoding: 7'd1 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = (signed<8>)MEM8[X[rs1]]; }
+}
+// CHECK: Pattern for PG_S8 [
+PG_S8 {
+    encoding: 7'd2 :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: 5'b00000 :: 7'b0001011;
+    assembly: "{name(rs2)}, {name(rs1)}";
+    behavior: { MEM8[X[rs1]] = X[rs2]; }
+}
+// CHECK: Pattern for PG_L16 [
+PG_L16 {
+    encoding: 7'd3 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = (signed<16>)MEM16[X[rs1]]; }
+}
+// CHECK: Pattern for PG_S16 [
+PG_S16 {
+    encoding: 7'd4 :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: 5'b00000 :: 7'b0001011;
+    assembly: "{name(rs2)}, {name(rs1)}";
+    behavior: { MEM16[X[rs1]] = X[rs2]; }
+}
+// CHECK: Pattern for PG_L32 [
+PG_L32 {
+    encoding: 7'd5 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = (signed<32>)MEM32[X[rs1]]; }
+}
+// CHECK: Pattern for PG_S32 [
+PG_S32 {
+    encoding: 7'd6 :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: 5'b00000 :: 7'b0001011;
+    assembly: "{name(rs2)}, {name(rs1)}";
+    behavior: { MEM32[X[rs1]] = X[rs2]; }
+}
+// CHECK: Pattern for PG_LX [
+PG_LX {
+    encoding: 7'd7 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = MEMX[X[rs1]]; }
+}
+// CHECK: Pattern for PG_SX [
+PG_SX {
+    encoding: 7'd8 :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: 5'b00000 :: 7'b0001011;
+    assembly: "{name(rs2)}, {name(rs1)}";
+    behavior: { MEMX[X[rs1]] = X[rs2]; }
+}
