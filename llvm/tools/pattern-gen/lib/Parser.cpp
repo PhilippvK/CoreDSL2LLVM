@@ -13,11 +13,13 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/AllocatorBase.h"
@@ -102,6 +104,11 @@ Value ParseExpression(TokenStream &ts, llvm::Function *func,
 
 static void __attribute__((noreturn)) error(const char *msg, TokenStream &ts) {
   fprintf(stderr, "%s:%i: %s\n", ts.path.c_str(), ts.lineNumber, msg);
+  exit(-1);
+}
+
+static void __attribute__((noreturn)) error(const char *msg) {
+  fprintf(stderr, "%s\n", msg);
   exit(-1);
 }
 
@@ -1177,6 +1184,24 @@ void ParseStatement(TokenStream &ts, llvm::Function *func,
   case CBrOpen:
     ParseScope(ts, func, build);
     break;
+  case Identifier:
+    if (ts.Peek().ident.str == "branch") {
+      ts.Pop();
+      pop_cur(ts, RBrOpen);
+      auto val = ParseExpression(ts, func, build);
+      pop_cur(ts, RBrClose);
+      promote_lvalue(build, val);
+      auto *xlenType = llvm::Type::getIntNTy(build.getContext(), xlen);
+      auto *condition = build.CreateZExt(
+          build.CreateICmpNE(val.ll,
+                             llvm::ConstantInt::get(val.ll->getType(), 0)),
+          xlenType);
+      build.CreateIntrinsic(xlenType, llvm::Intrinsic::riscv_pg_branch,
+                            {condition});
+      pop_cur(ts, Semicolon);
+      break;
+    }
+    [[fallthrough]];
   default: {
     ParseExpression(ts, func, build);
     pop_cur(ts, Semicolon);
@@ -1225,27 +1250,10 @@ struct AttrValue {
 
 using AttrMap = llvm::StringMap<AttrValue>;
 AttrMap ParseAttributes(TokenStream &ts) {
-  // using FieldType = CDSLInstr::FieldType;
-
-  // Sign bit specifies whether to OR or AND the mask, so just do
-  // ~MY_FIELD to unset myField.
-  // const static llvm::DenseMap<llvm::StringRef, std::pair<uint, bool>>
-  //     attrMap = {{"is_unsigned", {~FieldType::SIGNED_REG, 0}},
-  //                {"is_signed", {FieldType::SIGNED_REG, 0}},
-  //                {"is_imm", {FieldType::IMM, 0}},
-  //                {"is_reg", {FieldType::REG, 0}},
-  //                {"in", {FieldType::IN, 0}},
-  //                {"out", {FieldType::OUT, 0}},
-  //                {"inout", {(FieldType::IN | FieldType::OUT), 0}},
-  //                {"is_32_bit", {FieldType::IS_32_BIT, 0}}};
-
-  // uint acc = 0;
   AttrMap attrs;
   while (ts.Peek().type == ABrOpen) {
     for (int i = 0; i < 2; i++)
       pop_cur(ts, ABrOpen);
-
-    // bool allowArg = true;
 
     auto ident = pop_cur(ts, Identifier).ident;
     std::string name = std::string{ident.str};
@@ -1269,24 +1277,6 @@ AttrMap ParseAttributes(TokenStream &ts) {
       }
     }
     attrs[name] = std::move(value);
-
-    // auto iter = attrMap.find(attrName);
-    // if (iter != attrMap.end()) {
-    //   uint op = iter->getSecond().first;
-    //   allowArg = iter->getSecond().second;
-    //   if (op & (1UL << (std::numeric_limits<uint>::digits - 1)))
-    //     acc &= op;
-    //   else
-    //     acc |= op;
-    // }
-
-    // if (pop_cur_if(ts, Assignment)) {
-    //   if (!allowArg)
-    //     error("attribute does not take an argument", ts);
-    //   if (!llvm::find(std::array{Identifier, IntLiteral, StringLiteral},
-    //                   ts.Pop().type))
-    //     error("invalid attribute", ts);
-    // }
 
     for (int i = 0; i < 2; i++)
       pop_cur(ts, ABrClose);
@@ -1321,6 +1311,10 @@ void ApplyOperandAttributes(const AttrMap &attrs, CDSLInstr::Field &op,
       type &= (~FT::SIGNED_REG);
     } else if (name == "is_32_bit") {
       type |= FT::IS_32_BIT;
+    } else if (name == "is_branch_offs") {
+      type |= (FT::IMM | FT::BRANCH_OFFS);
+    } else if (name == "is_unroll_imm") {
+      type |= (FT::IMM | FT::UNROLL_IMM);
     } else if (name == "llvm_type") {
       if (val.kind != AttrValue::String)
         error("llvm_type must be a string", ts);
@@ -1411,6 +1405,7 @@ void ParseEncoding(TokenStream &ts, CDSLInstr &instr) {
       // Create field with 0xFF placeholder index
       instr.frags.push_back(CDSLInstr::FieldFrag{0xFF, len, (uint8_t)offset,
                                                  (uint8_t)offset, val});
+
       break;
     }
     case Identifier: {
@@ -1553,26 +1548,89 @@ void ParseAssembly(TokenStream &ts, CDSLInstr &instr) {
   pop_cur(ts, Semicolon);
 }
 
-void ParseBehaviour(TokenStream &ts, CDSLInstr &instr, llvm::Module *mod,
-                    Token const &ident) {
+auto MakeImplFunction(llvm::Module *mod, CDSLInstr &instr) {
   auto &ctx = mod->getContext();
   auto ptrT = llvm::PointerType::get(ctx, 0);
   auto immT = regT;
   llvm::SmallVector<llvm::Type *, 8> argTypes;
   llvm::SmallVector<llvm::StringRef, 8> argNames;
-  llvm::SmallVector<int, 8> argBitLens;
 
-  for (auto const &field : curInstr->fields) {
+  for (auto const &field : instr.fields) {
     if (!(field.type & CDSLInstr::NON_CONST)) {
-      assert(&field == &curInstr->fields.back());
+      assert(&field == &instr.fields.back());
       break;
     }
 
+    // Fixed immediates are part of the target instruction, but not
+    // arguments of the specialized semantic implementation.
+    if (field.fixedImm)
+      continue;
     llvm::Type *argT = ptrT;
-    int argBitLen = -1;
+    // int argBitLen = -1;
 
     if (field.type & CDSLInstr::IMM) {
       argT = immT;
+      // argBitLen = field.len;
+    }
+    argTypes.push_back(argT);
+    argNames.push_back(field.ident);
+  }
+
+  auto fType =
+      llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), argTypes, false);
+
+  auto *func = llvm::Function::Create(
+      fType, llvm::GlobalValue::ExternalLinkage,
+      std::string("impl") + std::string(instr.name), mod);
+
+  for (size_t i = 0; i < argNames.size(); i++)
+    func->getArg(i)->setName(argNames[i]);
+
+  // For vectorization to work, we must assume that
+  // the destination does not overlap with sources.
+  // For simulators using this generated code, this means
+  // that rd has to be a pointer to a temporary variable.
+  size_t argIdx = 0;
+  for (auto const &field : instr.fields) {
+    if (!(field.type & CDSLInstr::NON_CONST))
+      break;
+
+    if (field.fixedImm)
+      continue;
+
+    if (field.type & CDSLInstr::OUT)
+      func->getArg(argIdx)->addAttr(llvm::Attribute::NoAlias);
+
+    ++argIdx;
+  }
+
+  return func;
+}
+
+void ParseBehaviour(TokenStream &ts, CDSLInstr &instr, llvm::Module *mod,
+                    Token const &ident) {
+  auto &ctx = mod->getContext();
+
+  pop_cur(ts, BehaviorKeyword);
+  pop_cur(ts, Colon);
+
+  llvm::Function *func = MakeImplFunction(mod, instr);
+
+  entry = llvm::BasicBlock::Create(ctx, "", func);
+  llvm::IRBuilder<> build(entry);
+
+  // Generate range assumes for immediates
+  size_t i = 0;
+  for (auto const &field : instr.fields) {
+    if (!(field.type & CDSLInstr::NON_CONST)) {
+      assert(&field == &instr.fields.back());
+      break;
+    }
+
+    int argBitLen = -1;
+    bool argSigned = (field.type & CDSLInstr::SIGNED);
+
+    if ((field.type & CDSLInstr::IMM)) {
       argBitLen = field.len;
     }
 
@@ -1582,49 +1640,138 @@ void ParseBehaviour(TokenStream &ts, CDSLInstr &instr, llvm::Module *mod,
                 .c_str(),
             ts);
 
-    argTypes.push_back(argT);
-    argNames.push_back(field.ident);
-    argBitLens.push_back(argBitLen);
-  }
-
-  auto fType =
-      llvm::FunctionType::get(llvm::Type::getVoidTy(ctx), argTypes, false);
-
-  pop_cur(ts, BehaviorKeyword);
-  pop_cur(ts, Colon);
-
-  llvm::Function *func = llvm::Function::Create(
-      fType, llvm::GlobalValue::ExternalLinkage,
-      std::string("impl") + std::string(ident.ident.str), mod);
-
-  for (size_t i = 0; i < argNames.size(); i++)
-    func->getArg(i)->setName(argNames[i]);
-
-  // For vectorization to work, we must assume that
-  // the destination does not overlap with sources.
-  // For simulators using this generated code, this means
-  // that rd has to be a pointer to a temporary variable.
-  for (size_t i = 0; i < curInstr->fields.size(); i++)
-    if (curInstr->fields[i].type & CDSLInstr::OUT)
-      func->getArg(i)->addAttr(llvm::Attribute::NoAlias);
-
-  entry = llvm::BasicBlock::Create(ctx, "", func);
-  llvm::IRBuilder<> build(entry);
-
-  // Generate range assumes for immediates
-  for (size_t i = 0; i < argBitLens.size(); i++)
-    if (argBitLens[i] != -1) {
+    if (argBitLen != -1) {
+      if (argBitLen <= 0 || argBitLen > xlen)
+        error("immediate width must be between 1 and XLEN", ts);
       auto *arg = func->getArg(i);
-      auto *maskC =
-          llvm::ConstantInt::get(arg->getType(), (1ULL << argBitLens[i]) - 1);
 
-      auto *cond = build.CreateICmpEQ(arg, build.CreateAnd(arg, maskC));
+      llvm::Value *intermediate;
+      if (argSigned) {
+        auto *shamt = llvm::ConstantInt::get(
+            arg->getType(), arg->getType()->getIntegerBitWidth() - argBitLen);
+        intermediate = build.CreateAShr(build.CreateShl(arg, shamt), shamt);
+      } else {
+        auto *maskC = llvm::ConstantInt::get(
+            build.getContext(),
+            llvm::APInt::getLowBitsSet(arg->getType()->getIntegerBitWidth(),
+                                       argBitLen));
+        intermediate = build.CreateAnd(arg, maskC);
+      }
+
+      auto *cond = build.CreateICmpEQ(arg, intermediate);
       build.CreateIntrinsic(llvm::Type::getVoidTy(ctx), llvm::Intrinsic::assume,
                             {cond});
     }
+    i++;
+  }
 
   ParseStatement(ts, func, build);
   build.CreateRetVoid();
+}
+
+bool UnrollImms(llvm::Module *mod, std::vector<CDSLInstr> &instrs,
+                CDSLInstr &instr) {
+
+  unsigned numUnroll = 0;
+  for (auto &field : instr.fields)
+    if ((field.type & CDSLInstr::IMM) && (field.type & CDSLInstr::UNROLL_IMM))
+      numUnroll++;
+
+  if (numUnroll == 0)
+    return false;
+
+  unsigned fieldIdx = 0;
+  for (auto &field : instr.fields) {
+    if ((field.type & CDSLInstr::IMM) && (field.type & CDSLInstr::UNROLL_IMM)) {
+
+      if (field.len == 0 || field.len > 6)
+        error(("requested to unroll immediate of length " +
+               std::to_string(field.len) +
+               ". Unroll is only allowed for small immediates, disable unroll "
+               "or use smaller immediate")
+                  .c_str());
+
+      bool isSigned = field.type & CDSLInstr::SIGNED;
+      int64_t start = isSigned ? -(1 << (field.len - 1)) : 0;
+      int64_t end = isSigned ? (1 << (field.len - 1)) : (1 << field.len);
+
+      for (int64_t imm = start; imm != end; imm++) {
+        CDSLInstr instrClone{instr};
+
+        // Remember the actual target instruction before changing the
+        // semantic implementation name.
+        if (instrClone.llvm_instr.empty())
+          instrClone.llvm_instr = instr.name;
+
+        instrClone.name += std::string("_") + ((imm < 0) ? "n" : "") +
+                           std::to_string(std::abs(imm));
+
+        auto &fixedField = instrClone.fields[fieldIdx];
+        fixedField.fixedImm = imm;
+
+        // It has now been handled, so recursive UnrollImms() must not
+        // try to unroll this operand again.
+        fixedField.type = static_cast<CDSLInstr::FieldType>(
+            fixedField.type & ~CDSLInstr::UNROLL_IMM);
+
+        auto *func = MakeImplFunction(mod, instrClone);
+        entry = llvm::BasicBlock::Create(mod->getContext(), "", func);
+        llvm::IRBuilder<> build(entry);
+
+        auto *implFunc = mod->getFunction("impl" + instr.name);
+        // mod->dump();
+        assert(implFunc);
+        llvm::SmallVector<llvm::Value *> args;
+
+        unsigned parentArgIdx = 0;
+        unsigned cloneArgIdx = 0;
+
+        for (unsigned i = 0; i < instr.fields.size(); ++i) {
+          const auto &parentField = instr.fields[i];
+
+          if (!(parentField.type & CDSLInstr::NON_CONST))
+            break;
+
+          // Already-fixed operands aren't arguments of the parent
+          // implementation.
+          if (parentField.fixedImm)
+            continue;
+
+          if (i == fieldIdx) {
+            // This is the operand being specialized at this level.
+            auto *parentArg = implFunc->getArg(parentArgIdx);
+
+            args.push_back(
+                llvm::ConstantInt::get(parentArg->getType(), imm, isSigned));
+
+            ++parentArgIdx;
+            continue;
+          }
+
+          args.push_back(func->getArg(cloneArgIdx++));
+
+          ++parentArgIdx;
+        }
+
+        // This makes the optimizer delete the original implFunc after inlining
+        // it.
+        implFunc->setLinkage(llvm::GlobalValue::InternalLinkage);
+
+        assert(args.size() == implFunc->arg_size());
+        build.CreateCall(implFunc, args);
+        build.CreateRetVoid();
+
+        if (numUnroll == 1)
+          instrs.push_back(instrClone);
+        else
+          UnrollImms(mod, instrs, instrClone);
+      }
+      return true;
+    }
+    fieldIdx++;
+  }
+
+  return true;
 }
 
 std::vector<CDSLInstr> ParseCoreDSL2(TokenStream &ts, bool is64Bit,
@@ -1660,7 +1807,7 @@ std::vector<CDSLInstr> ParseCoreDSL2(TokenStream &ts, bool is64Bit,
       ++PatternGenNumInstructionsParsed;
 
       Token ident = pop_cur(ts, Identifier);
-      CDSLInstr instr{.name = std::string(ident.ident.str)};
+      CDSLInstr instr{std::string(ident.ident.str)};
       curInstr = &instr;
 
       ParseInstructionAttributes(ts, instr);
@@ -1673,7 +1820,9 @@ std::vector<CDSLInstr> ParseCoreDSL2(TokenStream &ts, bool is64Bit,
       ParseBehaviour(ts, instr, mod, ident);
 
       pop_cur(ts, CBrClose);
-      instrs.push_back(instr);
+
+      if (!UnrollImms(mod, instrs, instr))
+        instrs.push_back(instr);
     }
 
     if (parseBoilerplate) {

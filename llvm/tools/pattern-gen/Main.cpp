@@ -42,8 +42,10 @@ static cl::opt<std::string>
     InputLanguage("x", cl::desc("Input language ('cdsl' or 'll')"),
                   cl::cat(ToolOptions));
 
-static cl::opt<bool> Force("f", cl::desc("Ignore parser errors."),
-                           cl::cat(ToolOptions));
+static cl::opt<bool> Force(
+    "f",
+    cl::desc("Allow incomplete output when some instruction patterns fail."),
+    cl::cat(ToolOptions));
 static cl::opt<bool> SkipFmt("skip-formats",
                              cl::desc("Skip tablegen formats step."),
                              cl::cat(ToolOptions));
@@ -172,7 +174,7 @@ int main(int argc, char **argv) {
       PrintInstrsAsTableGen(Instrs, formatOut);
 
     if (!SkipPat)
-      if (generatePatterns(Mod.get(), Instrs, patternOut, Args))
+      if (generatePatterns(Mod.get(), Instrs, patternOut, Args) && !Force)
         return -1;
   }
   // If statistics were requested, print them out now.
