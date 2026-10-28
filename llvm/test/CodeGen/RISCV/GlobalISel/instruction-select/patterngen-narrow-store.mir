@@ -1,0 +1,27 @@
+# RUN: llc -mtriple=riscv32 -run-pass=instruction-select -verify-machineinstrs \
+# RUN:   -disable-gisel-legality-check %s -o - | FileCheck %s
+#
+# The store can reuse the full-width input of a truncation.
+# The narrow value remains live after the store. Extending the source's lifetime
+# must not leave the truncation's old kill flag on that source.
+---
+name: store_truncated_live_value
+legalized: true
+regBankSelected: true
+tracksRegLiveness: true
+body: |
+  bb.0:
+    liveins: $x10, $x11
+
+    ; CHECK-LABEL: name: store_truncated_live_value
+    ; CHECK: SB
+    ; CHECK: $x12 = COPY
+    ; CHECK: PseudoRET
+    %0:gprb(s32) = COPY $x10
+    %1:gprb(p0) = COPY $x11
+    %2:gprb(s8) = G_TRUNC killed %0
+    G_STORE %2(s8), %1(p0) :: (store (s8))
+    %3:gprb(s32) = G_ZEXT %2(s8)
+    $x12 = COPY %3
+    PseudoRET implicit $x12
+...

@@ -116,7 +116,7 @@ bool RISCVRedundantCopyElimination::optimizeBlock(MachineBasicBlock &MBB) {
   MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
   SmallVector<MachineOperand, 3> Cond;
   if (TII->analyzeBranch(*PredMBB, TBB, FBB, Cond, /*AllowModify*/ false) ||
-      Cond.empty())
+      Cond.size() != 3 || !Cond[1].isReg())
     return false;
 
   Register TargetReg = Cond[1].getReg();

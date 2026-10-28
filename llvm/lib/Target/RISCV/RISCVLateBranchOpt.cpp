@@ -55,7 +55,10 @@ bool RISCVLateBranchOpt::runOnBasicBlock(MachineBasicBlock &MBB) const {
     return false;
 
   RISCVCC::CondCode CC = RISCVInstrInfo::getCondFromBranchOpc(Cond[0].getImm());
-  assert(CC != RISCVCC::COND_INVALID);
+  // Generated branches may implement predicates beyond the native condition
+  // codes. Preserve them when their condition cannot be evaluated here.
+  if (CC == RISCVCC::COND_INVALID)
+    return false;
 
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
 

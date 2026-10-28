@@ -1119,10 +1119,11 @@ static void parseCondBranch(MachineInstr &LastInst, MachineBasicBlock *&Target,
   // Block ends with fall-through condbranch.
   assert(LastInst.getDesc().isConditionalBranch() &&
          "Unknown conditional branch");
-  Target = LastInst.getOperand(2).getMBB();
+  unsigned TargetIdx = LastInst.getNumExplicitOperands() - 1;
+  Target = LastInst.getOperand(TargetIdx).getMBB();
   Cond.push_back(MachineOperand::CreateImm(LastInst.getOpcode()));
-  Cond.push_back(LastInst.getOperand(0));
-  Cond.push_back(LastInst.getOperand(1));
+  for (unsigned I = 0; I < TargetIdx; ++I)
+    Cond.push_back(LastInst.getOperand(I));
 }
 
 static unsigned getInverseXqcicmOpcode(unsigned Opcode) {
@@ -1400,8 +1401,8 @@ unsigned RISCVInstrInfo::insertBranch(
 
   // Shouldn't be a fall through.
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
-  assert((Cond.size() == 3 || Cond.size() == 0) &&
-         "RISC-V branch conditions have two components!");
+  assert((Cond.empty() || Cond.size() >= 2) &&
+         "RISC-V branch conditions need an opcode and operands");
 
   // Unconditional branch.
   if (Cond.empty()) {
@@ -1412,10 +1413,10 @@ unsigned RISCVInstrInfo::insertBranch(
   }
 
   // Either a one or two-way conditional branch.
-  MachineInstr &CondMI = *BuildMI(&MBB, DL, get(Cond[0].getImm()))
-                              .add(Cond[1])
-                              .add(Cond[2])
-                              .addMBB(TBB);
+  auto CondBuilder = BuildMI(&MBB, DL, get(Cond[0].getImm()));
+  for (const auto &Operand : Cond.drop_front())
+    CondBuilder.add(Operand);
+  MachineInstr &CondMI = *CondBuilder.addMBB(TBB);
   if (BytesAdded)
     *BytesAdded += getInstSizeInBytes(CondMI);
 
@@ -1503,10 +1504,11 @@ void RISCVInstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
 
 bool RISCVInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
-  assert((Cond.size() == 3) && "Invalid branch condition!");
+  assert((Cond.size() >= 2) && "Invalid branch condition!");
   switch (Cond[0].getImm()) {
   default:
-    llvm_unreachable("Unknown conditional branch!");
+    // Generated branches without an inverse use relaxation trampolines.
+    return true;
   case RISCV::BEQ:
     Cond[0].setImm(RISCV::BNE);
     break;
@@ -1756,6 +1758,10 @@ bool RISCVInstrInfo::isBranchOffsetInRange(unsigned BranchOp,
   // PseudoBR.
   switch (BranchOp) {
   default:
+    // PatternGen emits signed 13-bit branch targets with the B format.
+    if (get(BranchOp).isConditionalBranch() &&
+        RISCVII::getFormat(get(BranchOp).TSFlags) == RISCVII::InstFormatB)
+      return isInt<13>(BrOffset);
     llvm_unreachable("Unexpected opcode!");
   case RISCV::NDS_BBC:
   case RISCV::NDS_BBS:
@@ -5201,7 +5207,9 @@ std::unique_ptr<TargetInstrInfo::PipelinerLoopInfo>
 RISCVInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
   MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
   SmallVector<MachineOperand, 4> Cond;
-  if (analyzeBranch(*LoopBB, TBB, FBB, Cond, /*AllowModify=*/false))
+  if (analyzeBranch(*LoopBB, TBB, FBB, Cond, /*AllowModify=*/false) ||
+      Cond.size() != 3 ||
+      getCondFromBranchOpc(Cond[0].getImm()) == RISCVCC::COND_INVALID)
     return nullptr;
 
   // Infinite loops are not supported
@@ -5216,8 +5224,8 @@ RISCVInstrInfo::analyzeLoopForPipelining(MachineBasicBlock *LoopBB) const {
          "The Loop must be a single-basic-block loop");
 
   // Normalization for createTripCountGreaterCondition()
-  if (TBB == LoopBB)
-    reverseBranchCondition(Cond);
+  if (TBB == LoopBB && reverseBranchCondition(Cond))
+    return nullptr;
 
   const MachineRegisterInfo &MRI = LoopBB->getParent()->getRegInfo();
   auto FindRegDef = [&MRI](MachineOperand &Op) -> const MachineInstr * {
