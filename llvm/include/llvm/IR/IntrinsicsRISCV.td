@@ -94,6 +94,12 @@ let TargetPrefix = "riscv" in {
 } // TargetPrefix = "riscv"
 
 //===----------------------------------------------------------------------===//
+// PatternGen uses this marker only while extracting instruction semantics.
+let TargetPrefix = "riscv" in {
+  def int_riscv_pg_branch : DefaultAttrsIntrinsic<[llvm_anyint_ty],
+      [LLVMMatchType<0>], [IntrNoMem, IntrHasSideEffects]>;
+}
+
 // May-Be-Operations
 
 let TargetPrefix = "riscv" in {

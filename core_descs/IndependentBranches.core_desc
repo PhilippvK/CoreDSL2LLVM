@@ -1,0 +1,34 @@
+// RUN: pattern-gen %s --riscv-xlen 32 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --riscv-xlen 64 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --print-mir -o %t.td 2>&1 | FileCheck --check-prefix=MIR %s
+// RUN: FileCheck --check-prefix=TD %s < %t.td
+
+// MIR: Machine code for function implPG_BEQ
+// MIR: G_INTRINSIC_W_SIDE_EFFECTS intrinsic(@llvm.riscv.pg.branch)
+// CHECK: Pattern for PG_BEQ [pg.beq]: (brcond {{.*}}SETEQ{{.*}}, bb:$offset)
+// CHECK: Pattern for PG_BAND [pg.band]: (brcond {{.*}}and{{.*}}SETNE{{.*}}, bb:$offset)
+// CHECK: Pattern for PG_BREG [pg.breg]: (brcond {{.*}}SETNE{{.*}}, bb:$offset)
+// TD: isBranch = 1, isTerminator = 1
+// TD: def PG_BEQ_ : RVInst_PG_BEQ<(outs ), (ins GPR:$rs2, GPR:$rs1, patterngen_btarget:$offset)>;
+// TD: def : Pat<
+// TD-NEXT: (brcond {{.*}}, bb:$offset),
+// TD-NEXT: (PG_BEQ_ GPR:$rs2, GPR:$rs1, bb:$offset)>;
+
+PG_BEQ {
+    operands: { signed<13> offset [[is_branch_offs]]; }
+    encoding: offset[12:12] :: offset[10:5] :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: offset[4:1] :: offset[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {name(rs2)}, {offset}";
+    behavior: { branch(X[rs1] == X[rs2]); }
+}
+PG_BAND {
+    operands: { signed<13> offset [[is_branch_offs]]; }
+    encoding: offset[12:12] :: offset[10:5] :: rs2[4:0] :: rs1[4:0] :: 3'b001 :: offset[4:1] :: offset[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {name(rs2)}, {offset}";
+    behavior: { branch(X[rs1] & X[rs2]); }
+}
+PG_BREG {
+    operands: { signed<13> offset [[is_branch_offs]]; }
+    encoding: offset[12:12] :: offset[10:5] :: 5'b00000 :: rs1[4:0] :: 3'b010 :: offset[4:1] :: offset[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {offset}";
+    behavior: { branch(X[rs1]); }
+}

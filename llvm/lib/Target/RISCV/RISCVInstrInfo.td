@@ -394,6 +394,17 @@ def bare_simm13_lsb0 : BareSImm13Lsb0MaybeSym,
 // is used to match with a basic block (eg. BccPat<>).
 def bare_simm13_lsb0_bb : BareSImm13Lsb0MaybeSym;
 
+// PatternGen fields retain displacement bit zero, unlike RVInstB's shifted
+// imm12 field. Keep the full displacement when encoding their B-format layouts.
+def patterngen_btarget : BareSImm13Lsb0MaybeSym {
+  let ParserMatchClass = BareSImmNLsb0AsmOperand<13>;
+  let PrintMethod = "printBranchOperand";
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeSImmOperand<13>";
+  let OperandType = "OPERAND_PCREL";
+}
+
+
 class UImm20OperandMaybeSym : RISCVUImmOp<20> {
   let MCOperandPredicate = [{
     int64_t Imm;
@@ -2439,3 +2450,11 @@ include "RISCVInstrInfoXAIF.td"
 //===----------------------------------------------------------------------===//
 
 include "RISCVInstrGISel.td"
+
+// Optional PatternGen output for the ordinary TableGen pattern importer.
+#ifdef USE_GENERATED_FORMATS
+include "patternsInstrFormat.td"
+#endif
+#ifdef USE_GENERATED_PATTERNS
+include "patterns.td"
+#endif

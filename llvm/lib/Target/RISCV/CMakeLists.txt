@@ -1,5 +1,13 @@
 add_llvm_component_group(RISCV)
 
+# Enable generated instruction includes only for RISC-V TableGen invocations.
+if(USE_GENERATED_FORMATS)
+  list(APPEND LLVM_TABLEGEN_FLAGS "-DUSE_GENERATED_FORMATS")
+endif()
+if(USE_GENERATED_PATTERNS)
+  list(APPEND LLVM_TABLEGEN_FLAGS "-DUSE_GENERATED_PATTERNS")
+endif()
+
 set(LLVM_TARGET_DEFINITIONS RISCV.td)
 
 tablegen(LLVM RISCVGenAsmMatcher.inc -gen-asm-matcher)

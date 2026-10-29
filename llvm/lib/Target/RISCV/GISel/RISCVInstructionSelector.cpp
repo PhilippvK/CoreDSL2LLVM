@@ -1501,6 +1501,39 @@ bool RISCVInstructionSelector::replacePtrWithInt(MachineOperand &Op) {
 
 void RISCVInstructionSelector::preISelLower(MachineInstr &MI) {
   switch (MI.getOpcode()) {
+  case TargetOpcode::G_STORE: {
+    Register Value = MI.getOperand(0).getReg();
+    LLT ValueTy = MRI->getType(Value);
+    LLT XLenTy = LLT::scalar(STI.getXLen());
+    if (!ValueTy.isScalar() || ValueTy.getSizeInBits() >= STI.getXLen() ||
+        !isRegInGprb(Value))
+      break;
+
+    // Ordinary truncstore patterns consume an XLEN register. Only the low
+    // memory-width bits are observable, so reusing a truncation's input or
+    // extending an otherwise narrow value preserves the stored value.
+    MachineInstr *Def = MRI->getVRegDef(Value);
+    if (Def && Def->getOpcode() == TargetOpcode::G_TRUNC &&
+        MRI->getType(Def->getOperand(1).getReg()) == XLenTy) {
+      Register Source = Def->getOperand(1).getReg();
+      MRI->clearKillFlags(Source);
+      MI.getOperand(0).setReg(Source);
+      MI.getOperand(0).setIsKill(false);
+      break;
+    }
+
+    Register Wide = MRI->createGenericVirtualRegister(XLenTy);
+    MRI->setRegBank(Wide, RBI.getRegBank(RISCV::GPRBRegBankID));
+    MachineInstr *Ext = BuildMI(*MI.getParent(), MI, MI.getDebugLoc(),
+                                TII.get(TargetOpcode::G_ANYEXT), Wide)
+                            .addReg(Value);
+    MI.getOperand(0).setReg(Wide);
+    bool Selected = select(*Ext);
+    assert(Selected && "failed to select scalar store extension");
+    (void)Selected;
+    break;
+  }
+
   case TargetOpcode::G_PTR_ADD: {
     Register DstReg = MI.getOperand(0).getReg();
     const LLT sXLen = LLT::scalar(STI.getXLen());

@@ -15,6 +15,7 @@
 
 #include "../../../tools/pattern-gen/PatternGen.hpp"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Support/CodeGen.h"
@@ -27,6 +28,7 @@ namespace PatternGenArgs {
 extern std::ostream *OutStream;
 extern std::vector<CDSLInstr> const *Instrs;
 extern PGArgsStruct Args;
+extern bool Failed;
 } // namespace PatternGenArgs
 
 class BlockFrequencyInfo;
@@ -52,6 +54,7 @@ public:
   bool runOnMachineFunction(MachineFunction &MF) override;
 
 protected:
+  StringSet<> EmittedInstructionDefs;
   BlockFrequencyInfo *BFI = nullptr;
   ProfileSummaryInfo *PSI = nullptr;
 

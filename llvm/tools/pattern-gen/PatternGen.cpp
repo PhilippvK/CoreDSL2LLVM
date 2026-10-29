@@ -37,6 +37,7 @@ int generatePatterns(llvm::Module *M, std::vector<CDSLInstr> const &Instrs,
   llvm::PatternGenArgs::OutStream = &Ostream;
   llvm::PatternGenArgs::Args = Args;
   llvm::PatternGenArgs::Instrs = &Instrs;
+  llvm::PatternGenArgs::Failed = false;
 
   if (!Args.Predicates.empty())
     Ostream << "let Predicates = [" << Args.Predicates << "] in {\n\n";
@@ -50,5 +51,5 @@ int generatePatterns(llvm::Module *M, std::vector<CDSLInstr> const &Instrs,
   llvm::PatternGenArgs::Args = PGArgsStruct();
   llvm::PatternGenArgs::Instrs = nullptr;
 
-  return Rv;
+  return Rv ? Rv : llvm::PatternGenArgs::Failed ? 1 : 0;
 }

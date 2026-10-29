@@ -14,9 +14,11 @@
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/Analysis/LazyBlockFrequencyInfo.h"
 #include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/CodeGen/GlobalISel/GISelValueTracking.h"
+#include "llvm/CodeGen/GlobalISel/GenericMachineInstrs.h"
 #include "llvm/CodeGen/GlobalISel/InstructionSelector.h"
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
@@ -36,6 +38,7 @@
 #include "llvm/Config/config.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CodeGenCoverage.h"
@@ -81,6 +84,7 @@ static const std::string CoveragePrefix;
 std::ostream *PatternGenArgs::OutStream = nullptr;
 std::vector<CDSLInstr> const *PatternGenArgs::Instrs = nullptr;
 PGArgsStruct PatternGenArgs::Args;
+bool PatternGenArgs::Failed = false;
 
 struct PatternArg {
   std::string ArgTypeStr;
@@ -98,6 +102,7 @@ static SmallVector<PatternArg, 8> PatternArgs;
 static bool HasSideEffects = 0; // TODO: get from parser attrs
 static bool MayLoad = 0;
 static bool MayStore = 0;
+static bool IsBranch = 0;
 
 static uint64_t XLen;
 static std::string RegT;
@@ -232,7 +237,8 @@ struct PatternNode {
     PN_Load,
     PN_Select,
     PN_Cast,
-    PN_Store
+    PN_Store,
+    PN_Branch
   };
 
 private:
@@ -793,7 +799,18 @@ struct StoreNode : public PatternNode {
     abort();
   }
 
-  static bool classof(const PatternNode *p) { return p->getKind() == PN_Cast; }
+  static bool classof(const PatternNode *p) { return p->getKind() == PN_Store; }
+};
+
+struct BranchNode : public PatternNode {
+  std::unique_ptr<PatternNode> Condition;
+  std::string Target;
+  BranchNode(std::unique_ptr<PatternNode> Condition, std::string Target)
+      : PatternNode(PN_Branch, LLT(), false), Condition(std::move(Condition)),
+        Target(std::move(Target)) {}
+  std::string patternString() override {
+    return "(brcond " + Condition->patternString() + ", bb:$" + Target + ")";
+  }
 };
 
 using PatternOrError = std::pair<PatternError, std::unique_ptr<PatternNode>>;
@@ -931,13 +948,20 @@ static int getArgIdx(MachineRegisterInfo &MRI, Register Reg) {
 
   if (It == MRI.livein_end())
     return -1;
-  return It - MRI.livein_begin();
+  unsigned ArgIdx = It - MRI.livein_begin();
+  for (unsigned I = 0; I < CurInstr->fields.size() - 1; ++I) {
+    if (CurInstr->fields[I].fixedImm)
+      continue;
+    if (ArgIdx-- == 0)
+      return I;
+  }
+  return -1;
 }
 
 static CDSLInstr::Field const *getArgField(MachineRegisterInfo &MRI,
                                            Register Reg) {
   uint Idx = getArgIdx(MRI, Reg);
-  if (Idx > CurInstr->fields.size())
+  if (Idx >= CurInstr->fields.size() - 1)
     return nullptr;
   return &CurInstr->fields[Idx];
 }
@@ -1173,9 +1197,13 @@ static PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
       return std::make_pair(PatternError(FORMAT_LOAD, &Cur), nullptr);
     auto *AddrI = Addr->getParent();
 
-    if (AddrI->getOpcode() == TargetOpcode::G_INTTOPTR)
+    auto [Error, Node] = traverseRegLoad(MRI, Cur, ReadSize, AddrI);
+    if (!Error)
+      return PPattern(std::move(Node));
+    if (AddrI->getOpcode() == TargetOpcode::G_INTTOPTR ||
+        AddrI->getOpcode() == TargetOpcode::G_PTR_ADD)
       return traverseMemLoad(MRI, Cur, ReadSize, AddrI);
-    return traverseRegLoad(MRI, Cur, ReadSize, AddrI);
+    return PError(Error);
   }
   case TargetOpcode::G_CONSTANT: {
     auto *Imm = Cur.getOperand(1).getCImm();
@@ -1212,6 +1240,8 @@ static PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
     if (Reg.isPhysical()) {
       auto [Idx, Field] = getArgInfo(MRI, Reg);
 
+      if (Field == nullptr)
+        return std::make_pair(FORMAT_IMM, nullptr);
       PatternArgs[Idx].In = true;
       PatternArgs[Idx].Llt = LLT();
       PatternArgs[Idx].ArgTypeStr = makeImmTypeStr(
@@ -1404,13 +1434,48 @@ static PatternOrError generatePattern(MachineFunction &MF) {
   auto Instrs = BB.instr_rbegin();
   auto InstrsEnd = BB.instr_rend();
 
-  // We expect the pattern block to end with a return immediately preceeded by a
-  // store which stores the destination register value.
+  // Semantic functions end in a return and one observable store or branch.
   if (Instrs == InstrsEnd || !Instrs->isReturn())
+    return PError(FORMAT_RETURN);
+  ++Instrs;
+  if (Instrs == InstrsEnd)
     return PError(FORMAT_STORE);
-  Instrs++;
-  if (Instrs == InstrsEnd || Instrs->getOpcode() != TargetOpcode::G_STORE)
-    return PError(FORMAT_STORE);
+
+  if (Instrs->getOpcode() == TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS &&
+      cast<GIntrinsic>(*Instrs).getIntrinsicID() ==
+          Intrinsic::riscv_pg_branch) {
+    const CDSLInstr::Field *Target = nullptr;
+    for (const auto &Field : CurInstr->fields)
+      if (Field.type & CDSLInstr::BRANCH_OFFS) {
+        if (Target || Field.fixedImm)
+          return pError(FORMAT_IMM, &*Instrs);
+        Target = &Field;
+      }
+    if (!Target)
+      return pError(FORMAT_IMM, &*Instrs);
+    auto *Cond = MRI.getVRegDef(Instrs->getOperand(2).getReg());
+    if (!Cond)
+      return pError(FORMAT, &*Instrs);
+    auto [Err, Node] = traverse(MRI, *Cond);
+    if (Err)
+      return PError(Err);
+    // Folding other observable writes into a branch needs a multi-root matcher.
+    for (auto It = std::next(Instrs); It != InstrsEnd; ++It)
+      if (It->mayStore() || It->hasUnmodeledSideEffects())
+        return pError(MULTIPLE_STORES, &*It);
+    // Branch on a nonzero value; comparisons already produce a boolean.
+    if (!(isa<BinopNode>(Node) && cast<BinopNode>(*Node).Op == ISD::SETCC)) {
+      LLT Type = Node->Type;
+      Node = std::make_unique<CompareNode>(
+          LLT::scalar(XLen), CmpInst::ICMP_NE, std::move(Node),
+          std::make_unique<ConstantNode>(Type, 0));
+    }
+    IsBranch = true;
+    return PPattern(std::make_unique<BranchNode>(std::move(Node),
+                                                 std::string(Target->ident)));
+  }
+  if (Instrs->getOpcode() != TargetOpcode::G_STORE)
+    return pError(FORMAT_STORE, &*Instrs);
 
   auto Result = traverseStore(MRI, *Instrs);
   // Return on error
@@ -1420,7 +1485,7 @@ static PatternOrError generatePattern(MachineFunction &MF) {
   Instrs++;
 
   for (; Instrs != InstrsEnd; Instrs++)
-    if (Instrs->getOpcode() == TargetOpcode::G_STORE) {
+    if (Instrs->mayStore() || Instrs->hasUnmodeledSideEffects()) {
       MachineInstr &MI = *Instrs;
       return pError(PatternErrorT::MULTIPLE_STORES, &MI);
     }
@@ -1430,14 +1495,25 @@ static PatternOrError generatePattern(MachineFunction &MF) {
 
 bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
 
+  bool Generated = false;
+  auto Cleanup = make_scope_exit([&] {
+    if (!Generated)
+      PatternGenArgs::Failed = true;
+    // No semantic instruction, including an extraction-only intrinsic, may
+    // reach the native instruction selector after success or failure.
+    for (auto &MBB : MF)
+      MBB.clear();
+  });
+
   // for convenience
   XLen = PatternGenArgs::Args.Is64Bit ? 64 : 32;
   RegT = PatternGenArgs::Args.Is64Bit ? "i64" : "i32";
   MayLoad = 0;
   MayStore = 0;
+  IsBranch = 0;
 
   if (PatternGenArgs::Args.DumpMIR) {
-    LLVM_DEBUG(MF.dump());
+    MF.print(errs());
   }
 
   std::string InstName = MF.getName().str().substr(4);
@@ -1458,6 +1534,11 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   // about parameters that may be found during pattern gen.
   PatternArgs.clear();
   PatternArgs.append(CurInstr->fields.size(), PatternArg());
+  for (unsigned I = 0; I < CurInstr->fields.size() - 1; ++I)
+    if (CurInstr->fields[I].type & CDSLInstr::BRANCH_OFFS) {
+      PatternArgs[I].In = true;
+      PatternArgs[I].ArgTypeStr = "patterngen_btarget";
+    }
 
   auto [Err, Node] = generatePattern(MF);
   if (Err) {
@@ -1476,7 +1557,52 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   LLT OutType = LLT();
   std::string OutsString;
   std::string InsString;
+  std::string PatternDstOps;
+  std::string BranchOperand;
+  std::string BranchPatternOperand;
   for (size_t I = 0; I < CurInstr->fields.size() - 1; I++) {
+    const auto &Field = CurInstr->fields[I];
+    if (IsBranch && (Field.type & CDSLInstr::BRANCH_OFFS)) {
+      if (Field.len != 13 || !(Field.type & CDSLInstr::SIGNED)) {
+        errs() << "Pattern Generation failed for " << MF.getName()
+               << ": branch offset must be signed<13>\n";
+        return true;
+      }
+      // The MC branch fixup uses the standard B-format displacement layout.
+      static constexpr unsigned DestBits[] = {0,  8,  9,  10, 11, 25, 26,
+                                              27, 28, 29, 30, 7,  31};
+      unsigned Seen = 0;
+      bool ValidLayout = true;
+      for (const auto &Frag : CurInstr->frags) {
+        if (Frag.idx != I)
+          continue;
+        for (unsigned Bit = 0; Bit < Frag.len; ++Bit) {
+          unsigned Source = Frag.srcOffset + Bit;
+          if (Source == 0 || Source > 12 ||
+              DestBits[Source] != Frag.dstOffset + Bit ||
+              (Seen & (1u << Source))) {
+            ValidLayout = false;
+            break;
+          }
+          Seen |= 1u << Source;
+        }
+      }
+      if (!ValidLayout || Seen != 0x1ffe) {
+        errs() << "Pattern Generation failed for " << MF.getName()
+               << ": branch offset must use the RISC-V B-format bit layout\n";
+        return true;
+      }
+      BranchOperand = "patterngen_btarget:$" + std::string(Field.ident) + ", ";
+      BranchPatternOperand = "bb:$" + std::string(Field.ident) + ", ";
+      continue;
+    }
+    if (Field.fixedImm) {
+      InsString += makeImmTypeStr(Field.len, Field.type & CDSLInstr::SIGNED,
+                                  Field.llvm_type) +
+                   ":$" + std::string(Field.ident) + ", ";
+      PatternDstOps += std::to_string(*Field.fixedImm) + ", ";
+      continue;
+    }
     // handle unused operands
     if (!PatternArgs[I].In && !PatternArgs[I].Out) {
       llvm::errs() << "Pattern Generation failed for " << MF.getName() << ": "
@@ -1503,8 +1629,10 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
     }
 
     if (PatternArgs[I].In) {
-      InsString += PatternArgs[I].ArgTypeStr + ":$" +
-                   std::string(CurInstr->fields[I].ident) + ", ";
+      std::string Op = PatternArgs[I].ArgTypeStr + ":$" +
+                       std::string(CurInstr->fields[I].ident) + ", ";
+      InsString += Op;
+      PatternDstOps += Op;
     }
     if (PatternArgs[I].Out) {
       bool IO = PatternArgs[I].In;
@@ -1517,54 +1645,59 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
+  InsString += BranchOperand;
+  PatternDstOps += BranchPatternOperand;
   llvm::outs() << "Pattern for " << InstName << " [" << InstMnemonic
                << "]: " << Node->patternString() << '\n';
   ++PatternGenNumPatternsGenerated;
 
   InsString = InsString.substr(0, InsString.size() - 2);
+  PatternDstOps = PatternDstOps.substr(0, PatternDstOps.size() - 2);
   OutsString = OutsString.substr(0, OutsString.size() - 2);
 
   auto &OutStream = *PatternGenArgs::OutStream;
 
-  OutStream << "let hasSideEffects = " + std::to_string((int)HasSideEffects) +
-                   ", mayLoad = " + std::to_string((int)MayLoad) +
-                   ", mayStore = " + std::to_string((int)MayStore) +
-                   ", "
-                   "isCodeGenOnly = 1";
+  std::string TargetDefName = InstNameO + "_";
+  if (EmittedInstructionDefs.insert(TargetDefName).second) {
+    OutStream << "let hasSideEffects = " + std::to_string((int)HasSideEffects) +
+                     ", mayLoad = " + std::to_string((int)MayLoad) +
+                     ", mayStore = " + std::to_string((int)MayStore) +
+                     ", isBranch = " + std::to_string((int)IsBranch) +
+                     ", isTerminator = " + std::to_string((int)IsBranch) +
+                     ", isCodeGenOnly = 1";
 
-  OutStream << ", Constraints = \"";
-  {
-    std::string Constr = "";
-    for (size_t I = 0; I < CurInstr->fields.size(); I++) {
-      auto const &Field = CurInstr->fields[I];
-      if (PatternArgs[I].In && PatternArgs[I].Out)
-        Constr += "$" + std::string(Field.ident) + " = $" +
-                  std::string(Field.ident) + "_wb, ";
+    if (IsBranch)
+      OutStream << ", Format = InstFormatB";
+    OutStream << ", Constraints = \"";
+    {
+      std::string Constr = "";
+      for (size_t I = 0; I < CurInstr->fields.size(); I++) {
+        auto const &Field = CurInstr->fields[I];
+        if (PatternArgs[I].In && PatternArgs[I].Out)
+          Constr += "$" + std::string(Field.ident) + " = $" +
+                    std::string(Field.ident) + "_wb, ";
+      }
+      Constr = Constr.substr(0, Constr.size() - 2);
+      OutStream << Constr;
     }
-    Constr = Constr.substr(0, Constr.size() - 2);
-    OutStream << Constr;
+    OutStream << "\" in ";
+    OutStream << "def " << TargetDefName << " : RVInst_" << InstNameO
+              << "<(outs " << OutsString << "), (ins " << InsString << ")>;\n";
   }
-  OutStream << "\" in ";
-  OutStream << "def " << InstName << "_ : RVInst_" << InstNameO << "<(outs "
-            << OutsString << "), (ins " << InsString << ")>;\n";
 
   std::string PatternStr = Node->patternString();
   std::string Code = "def : Pat<\n\t";
 
   if (OutType.isValid())
     Code += "(" + lltToString(OutType) + " " + PatternStr + "),\n\t(" +
-            InstName + "_ ";
+            TargetDefName + " ";
   else
-    Code += PatternStr + ",\n\t(" + InstName + "_ ";
+    Code += PatternStr + ",\n\t(" + TargetDefName + " ";
 
-  Code += InsString;
+  Code += PatternDstOps;
   Code += ")>;";
   OutStream << "\n" << Code << "\n\n";
 
-  // Delete all instructions to avoid match failures if patterns are not
-  // included
-  for (auto &MBB : MF)
-    MBB.clear();
-
+  Generated = true;
   return true;
 }
