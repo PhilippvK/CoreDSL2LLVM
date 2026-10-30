@@ -1,0 +1,65 @@
+// RUN: pattern-gen %s --no-extend --riscv-xlen 32 -p IsRV32 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --riscv-xlen 64 -p IsRV64 -o %t.td | FileCheck %s
+// RUN: FileCheck --check-prefix=TD %s < %t.td
+
+// TD-NOT: ptradd
+// TD: _singleuse_load : PatFrag<
+// TD-SAME: HasOneUse = 1
+// TD: GISelFlags { let GIIgnoreCopies = 1; }
+// TD-NOT: ptradd
+
+// CHECK: Pattern for PG_LDX_REG [
+PG_LDX_REG {
+    encoding: 10'd0 :: rd[4:0] :: rs1[4:0] :: rs2[4:0] :: 7'b1111011;
+    assembly: "{name(rd)}, {name(rs1)}, {name(rs2)}";
+    behavior: { X[rd] = MEMX[X[rs1] + X[rs2] ]; }
+}
+
+// CHECK: Pattern for PG_STX_REG [
+PG_STX_REG {
+    encoding: 10'd1 :: rs1[4:0] :: rs2[4:0] :: rs3[4:0] :: 7'b1111011;
+    assembly: "{name(rs1)}, {name(rs2)}, {name(rs3)}";
+    behavior: { MEMX[X[rs1] + X[rs2] ] = X[rs3]; }
+}
+
+// CHECK: Pattern for PG_LDX_SCALE [
+PG_LDX_SCALE {
+    encoding: 10'd2 :: rd[4:0] :: rs1[4:0] :: rs2[4:0] :: 7'b1111011;
+    assembly: "{name(rd)}, {name(rs1)}, {name(rs2)}";
+    behavior: { X[rd] = MEMX[X[rs1] + (X[rs2] << 2)]; }
+}
+
+// CHECK: Pattern for PG_STX_SCALE [
+PG_STX_SCALE {
+    encoding: 10'd3 :: rs1[4:0] :: rs2[4:0] :: rs3[4:0] :: 7'b1111011;
+    assembly: "{name(rs1)}, {name(rs2)}, {name(rs3)}";
+    behavior: { MEMX[X[rs1] + (X[rs2] << 2)] = X[rs3]; }
+}
+
+// CHECK: Pattern for PG_LD_ADD [
+PG_LD_ADD {
+    encoding: 10'd4 :: rd[4:0] :: rs1[4:0] :: rs2[4:0] :: 7'b1111011;
+    assembly: "{name(rd)}, {name(rs1)}, {name(rs2)}";
+    behavior: { X[rd] = MEMX[X[rs1] ] + X[rs2]; }
+}
+
+// CHECK: Pattern for PG_ST_XOR [
+PG_ST_XOR {
+    encoding: 10'd5 :: rs1[4:0] :: rs2[4:0] :: rs3[4:0] :: 7'b1111011;
+    assembly: "{name(rs1)}, {name(rs2)}, {name(rs3)}";
+    behavior: { MEMX[X[rs1] ] = X[rs2] ^ X[rs3]; }
+}
+
+// CHECK: Pattern for PG_LD_BOTH [
+PG_LD_BOTH {
+    encoding: 5'd6 :: rd[4:0] :: rs1[4:0] :: rs2[4:0] :: rs3[4:0] :: 7'b1111011;
+    assembly: "{name(rd)}, {name(rs1)}, {name(rs2)}, {name(rs3)}";
+    behavior: { X[rd] = MEMX[X[rs1] + X[rs2] ] ^ X[rs3]; }
+}
+
+// CHECK: Pattern for PG_ST_BOTH [
+PG_ST_BOTH {
+    encoding: 5'd7 :: rs1[4:0] :: rs2[4:0] :: rs3[4:0] :: rs4[4:0] :: 7'b1111011;
+    assembly: "{name(rs1)}, {name(rs2)}, {name(rs3)}, {name(rs4)}";
+    behavior: { MEMX[X[rs1] + (X[rs2] << 2)] = X[rs3] + X[rs4]; }
+}
