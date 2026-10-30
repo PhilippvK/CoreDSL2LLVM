@@ -1,0 +1,9 @@
+// RUN: pattern-gen %s --no-extend --riscv-xlen 32 -p IsRV32 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --riscv-xlen 64 -p IsRV64 -o %t.td | FileCheck %s
+
+// CHECK: Pattern for PG_STORE_SLICE [{{.*}}truncstorei16{{.*}}GPR:$rs2
+PG_STORE_SLICE {
+    encoding: 7'd9 :: rs2[4:0] :: rs1[4:0] :: 3'b000 :: 5'b00000 :: 7'b0001011;
+    assembly: "{name(rs2)}, {name(rs1)}";
+    behavior: { MEM16[X[rs1] ] = X[rs2][15:0]; }
+}
