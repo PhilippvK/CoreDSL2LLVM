@@ -548,7 +548,14 @@ struct CompareNode : public BinopNode {
               std::unique_ptr<PatternNode> Left,
               std::unique_ptr<PatternNode> Right)
       : BinopNode(Type, ISD::SETCC, std::move(Left), std::move(Right)),
-        Cond(Cond) {}
+        Cond(Cond) {
+    // The ordinary GlobalISel importer matches comparison operands in order.
+    // Put condition immediates on the right, as LLVM does in generated code.
+    if (this->Left->IsImm && !this->Right->IsImm) {
+      std::swap(this->Left, this->Right);
+      this->Cond = CmpInst::getSwappedPredicate(Cond);
+    }
+  }
 
   std::string patternString() override {
     std::string TypeStr = lltToString(Type);
@@ -1383,6 +1390,22 @@ static PatternOrError traverseMemStore(LLT Type, MachineRegisterInfo &MRI,
   auto ValueP = traverse(MRI, ValMI);
   if (ValueP.first)
     return PError(ValueP.first);
+  // A low-bit register slice may be parsed as a narrow load directly from
+  // the register argument, rather than an XLEN load followed by G_TRUNC.
+  // A truncstore consumes the full register and observes only these low bits.
+  if (auto *Reg = dyn_cast<RegisterNode>(ValueP.second.get());
+      Reg && !Reg->IsImm && Reg->Type.isScalar() &&
+      Reg->Type.getSizeInBits() < XLen) {
+    if (ValMI.getOpcode() != TargetOpcode::G_LOAD)
+      return pError(FORMAT_LOAD, &ValMI);
+    auto *Address = MRI.getVRegDef(ValMI.getOperand(1).getReg());
+    if (!Address || Address->getOpcode() != TargetOpcode::COPY)
+      return pError(FORMAT_LOAD, &ValMI);
+    Reg->Type = LLT::scalar(XLen);
+    Reg->Size = XLen;
+    PatternArgs[Reg->RegIdx].Llt = Reg->Type;
+    PatternArgs[Reg->RegIdx].ArgTypeStr = lltToRegTypeStr(Reg->Type);
+  }
   auto AddrP = traverse(MRI, Addr);
   if (AddrP.first)
     return PError(AddrP.first);

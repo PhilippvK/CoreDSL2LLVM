@@ -1,0 +1,51 @@
+// RUN: pattern-gen %s --no-extend --riscv-xlen 32 -p IsRV32 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --riscv-xlen 64 -p IsRV64 -o %t.td | FileCheck %s
+// RUN: FileCheck --check-prefix=TD %s < %t.td
+
+// CHECK: Pattern for PG_BEQI5 [{{.*}}GPR:$rs1{{.*}}simm5:$constant{{.*}}SETEQ
+// TD: simm5:$constant
+PG_BEQI5 {
+    operands: {
+        signed<5> constant [[llvm_type = "simm5"]];
+        signed<13> displacement [[is_branch_offs]];
+    }
+    encoding: displacement[12:12] :: displacement[10:5] :: constant[4:0] :: rs1[4:0] :: 3'b011 :: displacement[4:1] :: displacement[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {constant}, {displacement}";
+    behavior: { branch((signed)constant == X[rs1]); }
+}
+
+// CHECK: Pattern for PG_BLTUI3 [{{.*}}GPR:$rs1{{.*}}uimm3:$limit{{.*}}SETULT
+// TD: uimm3:$limit
+PG_BLTUI3 {
+    operands: {
+        unsigned<3> limit [[llvm_type = "uimm3"]];
+        signed<13> destination [[is_branch_offs]];
+    }
+    encoding: destination[12:12] :: destination[10:5] :: 2'b11 :: limit[2:0] :: rs1[4:0] :: 3'b100 :: destination[4:1] :: destination[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {limit}, {destination}";
+    behavior: { branch(X[rs1] < limit); }
+}
+
+// CHECK: Pattern for PG_BNEI8 [{{.*}}GPR:$rs1{{.*}}pg_simm8:$threshold{{.*}}SETNE
+// TD: pg_simm8:$threshold
+PG_BNEI8 {
+    operands: {
+        signed<8> threshold [[llvm_type = "pg_simm8"]];
+        signed<13> target [[is_branch_offs]];
+    }
+    encoding: target[12:12] :: target[10:5] :: threshold[7:3] :: rs1[4:0] :: threshold[2:0] :: target[4:1] :: target[11:11] :: 7'b1011011;
+    assembly: "{name(rs1)}, {threshold}, {target}";
+    behavior: { branch((signed)threshold != X[rs1]); }
+}
+
+// CHECK: Pattern for PG_BLTI5 [{{.*}}GPR:$rs1{{.*}}simm5:$bound{{.*}}SETLT
+// TD: simm5:$bound
+PG_BLTI5 {
+    operands: {
+        signed<5> bound [[llvm_type = "simm5"]];
+        signed<13> destination [[is_branch_offs]];
+    }
+    encoding: destination[12:12] :: destination[10:5] :: bound[4:0] :: rs1[4:0] :: 3'b101 :: destination[4:1] :: destination[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {bound}, {destination}";
+    behavior: { branch((signed)bound > (signed<XLEN>)X[rs1]); }
+}
