@@ -1138,9 +1138,24 @@ static PatternOrError traverse(MachineRegisterInfo &MRI, MachineInstr &Cur) {
       return std::make_pair(Err, nullptr);
 
     assert(Cur.getOperand(0).isReg() && "expected register");
+    LLT Type = MRI.getType(Cur.getOperand(0).getReg());
+    unsigned Opcode = Cur.getOpcode();
+    if (Opcode == TargetOpcode::G_PTR_ADD && !NodeR->IsImm) {
+      // Match the selector's early lowering of variable pointer offsets.
+      // Immediate offsets retain ptradd for native base+offset folding.
+      Opcode = TargetOpcode::G_ADD;
+      Type = LLT::scalar(XLen);
+      while (auto *Cast = dyn_cast<CastNode>(NodeL.get())) {
+        if (!Cast->Type.isPointer())
+          break;
+        auto Value = std::move(Cast->Value);
+        NodeL = std::move(Value);
+      }
+      if (NodeL->Type.isPointer())
+        NodeL->Type = Type;
+    }
     auto Node = std::make_unique<BinopNode>(
-        MRI.getType(Cur.getOperand(0).getReg()), Cur.getOpcode(),
-        std::move(NodeL), std::move(NodeR));
+        Type, Opcode, std::move(NodeL), std::move(NodeR));
 
     return std::make_pair(SUCCESS, std::move(Node));
   }
@@ -1709,6 +1724,35 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
   }
 
   std::string PatternStr = Node->patternString();
+  // Folding a shared load would introduce another memory access. In
+  // particular, duplicating a volatile read changes observable behavior.
+  if (MayLoad && !isa<LoadNode>(Node.get())) {
+    for (const char *Op : {"load", "sextloadi8", "sextloadi16", "sextloadi32",
+                           "zextloadi8", "zextloadi16", "zextloadi32"}) {
+      std::string Needle = "(" + std::string(Op) + " ";
+      if (PatternStr.find(Needle) == std::string::npos)
+        continue;
+      std::string Fragment = InstNameO + "_singleuse_" + Op;
+      if (EmittedInstructionDefs.insert(Fragment).second) {
+        // PatFrags have no Predicates field: declare the helper outside the
+        // instruction feature guard, then resume that guard for the rule.
+        const std::string &Predicates = PatternGenArgs::Args.Predicates;
+        if (!Predicates.empty())
+          OutStream << "}\n";
+        OutStream << "def " << Fragment
+                  << " : PatFrag<(ops node:$ptr), (" << Op
+                  << " node:$ptr)> { let HasOneUse = 1; }\n";
+        if (!Predicates.empty())
+          OutStream << "let Predicates = [" << Predicates << "] in {\n";
+      }
+      std::string Replacement = "(" + Fragment + " ";
+      size_t Pos = 0;
+      while ((Pos = PatternStr.find(Needle, Pos)) != std::string::npos) {
+        PatternStr.replace(Pos, Needle.size(), Replacement);
+        Pos += Replacement.size();
+      }
+    }
+  }
   std::string Code = "def : Pat<\n\t";
 
   if (OutType.isValid())
@@ -1718,7 +1762,13 @@ bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
     Code += PatternStr + ",\n\t(" + TargetDefName + " ";
 
   Code += PatternDstOps;
-  Code += ")>;";
+  Code += ")>";
+  // Address casts and pointer arithmetic lower to copies before selection.
+  // Match the underlying arithmetic while retaining GlobalISel folding checks.
+  if (MayLoad || MayStore)
+    Code += ", GISelFlags { let GIIgnoreCopies = 1; }";
+  else
+    Code += ";";
   OutStream << "\n" << Code << "\n\n";
 
   Generated = true;

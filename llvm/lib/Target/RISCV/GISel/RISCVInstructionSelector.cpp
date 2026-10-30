@@ -49,6 +49,31 @@ public:
                BlockFrequencyInfo *BFI) override {
     InstructionSelector::setupMF(MF, VT, CoverageInfo, PSI, BFI);
     MRI = &MF.getRegInfo();
+    // Expose integer address arithmetic before selecting its memory users.
+    // Preserve pointer-typed uses through copies so native fallback stays valid.
+    for (MachineBasicBlock &MBB : MF) {
+      for (MachineInstr &MI : make_early_inc_range(MBB)) {
+        if (MI.getOpcode() == TargetOpcode::G_INTTOPTR ||
+            MI.getOpcode() == TargetOpcode::G_PTRTOINT) {
+          selectCopy(MI);
+          continue;
+        }
+        if (MI.getOpcode() != TargetOpcode::G_PTR_ADD)
+          continue;
+        // Keep immediate offsets available to native base+offset folding.
+        if (getIConstantVRegValWithLookThrough(MI.getOperand(2).getReg(),
+                                              *MRI))
+          continue;
+
+        Register Ptr = MI.getOperand(0).getReg();
+        Register Int = MRI->createGenericVirtualRegister(LLT::scalar(STI.getXLen()));
+        MRI->setRegBank(Int, RBI.getRegBank(RISCV::GPRBRegBankID));
+        MI.getOperand(0).setReg(Int);
+        preISelLower(MI);
+        BuildMI(MBB, std::next(MI.getIterator()), MI.getDebugLoc(),
+                TII.get(TargetOpcode::COPY), Ptr).addReg(Int);
+      }
+    }
   }
 
   static const char *getName() { return DEBUG_TYPE; }
