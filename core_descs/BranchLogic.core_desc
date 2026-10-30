@@ -1,0 +1,17 @@
+// RUN: pattern-gen %s --no-extend --riscv-xlen 32 -p IsRV32 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --riscv-xlen 64 -p IsRV64 -o %t.td | FileCheck %s
+
+// CHECK: Pattern for PG_BOR [
+PG_BOR {
+    operands: { signed<13> offset [[is_branch_offs]]; }
+    encoding: offset[12:12] :: offset[10:5] :: rs2[4:0] :: rs1[4:0] :: 3'b110 :: offset[4:1] :: offset[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {name(rs2)}, {offset}";
+    behavior: { branch(X[rs1] | X[rs2]); }
+}
+// CHECK: Pattern for PG_BXOR [
+PG_BXOR {
+    operands: { signed<13> offset [[is_branch_offs]]; }
+    encoding: offset[12:12] :: offset[10:5] :: rs2[4:0] :: rs1[4:0] :: 3'b111 :: offset[4:1] :: offset[11:11] :: 7'b0101011;
+    assembly: "{name(rs1)}, {name(rs2)}, {offset}";
+    behavior: { branch(X[rs1] ^ X[rs2]); }
+}
