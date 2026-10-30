@@ -1,0 +1,9 @@
+// RUN: pattern-gen %s --no-extend --riscv-xlen 32 -p IsRV32 -o %t.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --riscv-xlen 64 -p IsRV64 -o %t.td | FileCheck %s
+
+// CHECK: Pattern for PG_EXTRACT [{{.*}}srl{{.*}}GPR:$rs1{{.*}}uimm5:$base{{.*}}255
+PG_EXTRACT {
+    encoding: 7'd32 :: base[4:0] :: rs1[4:0] :: 3'b001 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}, {base}";
+    behavior: { X[rd] = X[rs1][base +: 8]; }
+}
