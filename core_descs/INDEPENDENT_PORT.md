@@ -99,7 +99,7 @@ python3 core_descs/check-pattern-fixes.py build-port/bin
 ```
 
 This checks generated branch, load, store, and specialized-immediate selection
-on both architectures. It also emits an ELF object with an 8 KB gap and checks
+on both architectures. It also emits an ELF object with more than 8 KB of volatile stores and checks
 that a generated conditional branch survives relaxation and has an encoded
 local displacement within its 13-bit range.
 
@@ -119,3 +119,8 @@ files:
 touch llvm/lib/Target/RISCV/patterns.td llvm/lib/Target/RISCV/patternsInstrFormat.td
 cmake --build build-port --target llc llvm-objdump -j 8
 ```
+
+The branch fixtures use volatile memory effects to keep both successors observable.
+This also works with LLVM 22, whose RISC-V GlobalISel cannot translate inline
+assembly. The signed 8-bit regression operand uses the generic MC immediate kind
+with explicit signed-range predicates, since LLVM 22 has no native `OPERAND_SIMM8`.

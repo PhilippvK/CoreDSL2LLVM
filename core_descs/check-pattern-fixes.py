@@ -11,6 +11,7 @@ import sys
 import tempfile
 
 BIN = pathlib.Path(sys.argv[1]).resolve()
+EFFECTS = "@branch_fall = external global i8\n@branch_taken = external global i8\n"
 
 
 def compile_ir(ir, xlen, *args):
@@ -46,10 +47,10 @@ def branch(name, ty, condition, binary=False):
         f"""  {condition}
   br i1 %c, label %taken, label %fall
 fall:
-  call void asm sideeffect "addi zero, zero, 1", ""()
+  store volatile i8 1, ptr @branch_fall
   ret void
 taken:
-  call void asm sideeffect "nop", ""()
+  store volatile i8 2, ptr @branch_taken
   ret void""",
     )
 
@@ -63,7 +64,7 @@ def selected_function(mir, name):
 with tempfile.TemporaryDirectory(prefix="patterngen-fixes-") as directory:
     for xlen in (32, 64):
         ty = f"i{xlen}"
-        ir = ""
+        ir = EFFECTS
         checks = {}
         for scaled in (False, True):
             suffix = "scale" if scaled else "reg"

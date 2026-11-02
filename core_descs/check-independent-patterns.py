@@ -55,7 +55,8 @@ def pg_simm8 : RISCVOp, ImmLeaf<XLenVT, "return isInt<8>(Imm);"> {
   let ParserMatchClass = PGImm8;
   let EncoderMethod = "getImmOpValue";
   let DecoderMethod = "decodeSImmOperand<8>";
-  let OperandType = "OPERAND_SIMM8";
+  let OperandNamespace = "MCOI";
+  let OperandType = "OPERAND_IMMEDIATE";
   let MCOperandPredicate = [{
     int64_t Imm;
     return MCOp.evaluateAsConstantImm(Imm) && isInt<8>(Imm);
