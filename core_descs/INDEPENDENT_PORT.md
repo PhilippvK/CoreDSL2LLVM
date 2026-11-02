@@ -1,14 +1,14 @@
-# LLVM 23 PatternGen features using ordinary TableGen patterns
+# LLVM 22 PatternGen features using ordinary TableGen patterns
 
 This port takes the independent features of `llvm-20.1.0-gisel-table-new`
-(`d1dd6867429`) onto `llvm-23.1.3`. It uses LLVM's existing
+(`d1dd6867429`) onto `llvm-22.1.8`. It uses LLVM's existing
 SelectionDAG-to-GlobalISel TableGen importer. It does not require the custom
 GISel table emitter, matcher opcodes, instruction-deletion markers, or
 multi-root extraction.
 
 ## Features
 
-- Explicit memory and register names remain supported by the LLVM 23 parser.
+- Explicit memory and register names remain supported by the LLVM 22 parser.
   A load feeding a register output or one memory store is a supported pattern
   root. The regression inputs cover 8-, 16-, 32-, and XLEN-bit memory operations.
 - `branch(condition);` emits a `brcond` pattern. Integer conditions mean
@@ -48,7 +48,7 @@ multi-root extraction.
 - Signed immediate assumptions preserve negative values. Unsigned assumptions
   also support an immediate as wide as XLEN without an undefined host shift.
 - `--print-mir` prints without requiring LLVM's debug logging. Predicate strings
-  and ternary-expression patterns were already present in LLVM 23 and are retained.
+  and ternary-expression patterns were already present in LLVM 22 and are retained.
 - Extraction failures return a nonzero status and discard their semantic
   machine instructions before native selection. Use `-f` to request partial
   pattern output explicitly; the XCV fixture uses this for its unsupported

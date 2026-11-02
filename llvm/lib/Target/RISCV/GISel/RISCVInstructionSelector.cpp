@@ -69,7 +69,8 @@ public:
         Register Int = MRI->createGenericVirtualRegister(LLT::scalar(STI.getXLen()));
         MRI->setRegBank(Int, RBI.getRegBank(RISCV::GPRBRegBankID));
         MI.getOperand(0).setReg(Int);
-        preISelLower(MI);
+        MachineIRBuilder MIB(MI);
+        preISelLower(MI, MIB);
         BuildMI(MBB, std::next(MI.getIterator()), MI.getDebugLoc(),
                 TII.get(TargetOpcode::COPY), Ptr).addReg(Int);
       }
