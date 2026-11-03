@@ -1,0 +1,18 @@
+// RUN: pattern-gen %s --no-extend --gisel-table --riscv-xlen 32 --mattr=+m -o %t32.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --gisel-table --riscv-xlen 64 --mattr=+m -o %t64.td | FileCheck %s
+// CHECK: Generated 2 out of 2 GISel pattern permutations for PGM_SUMDIFF (100%)
+// CHECK: Pattern for PGM_SUMDIFF
+InstructionSet XGISelMulti extends RISCVBase {
+  instructions {
+    PGM_SUMDIFF {
+      encoding: 2'b10 :: rd2[4:0] :: rs2[4:0] :: rs1[4:0] :: 3'd0 :: rd1[4:0] :: 7'b0001011;
+      assembly: {"pgm.sumdiff", "{name(rd1)}, {name(rd2)}, {name(rs1)}, {name(rs2)}"};
+      behavior: {
+        unsigned<XLEN> a = X[rs1];
+        unsigned<XLEN> b = X[rs2];
+        X[rd1] = a + b;
+        X[rd2] = a - b;
+      }
+    }
+  }
+}
