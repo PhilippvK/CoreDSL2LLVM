@@ -9,11 +9,13 @@ struct PGArgsStruct {
   llvm::CodeGenOptLevel OptLevel;
   std::string Predicates;
   bool Is64Bit;
+  bool GISelTableBackend;
   bool DumpMIR;
 };
 
 int optimizeBehavior(llvm::Module *M, std::vector<CDSLInstr> const &Instrs,
                      std::ostream &OstreamIR, PGArgsStruct Args);
 int generatePatterns(llvm::Module *M, std::vector<CDSLInstr> const &Instrs,
-                     std::ostream &Ostream, PGArgsStruct Args);
+                     std::ostream &Ostream, std::ostream &OstreamGISelTable,
+                     PGArgsStruct Args);
 // void PrintPattern(llvm::SelectionDAG& DAG);

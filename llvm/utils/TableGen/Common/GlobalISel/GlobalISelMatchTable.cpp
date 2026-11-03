@@ -809,7 +809,9 @@ bool RuleMatcher::hasFirstCondition() const {
     return true;
   for (auto &OM : Matcher.operands())
     for (auto &OP : OM->predicates())
-      if (!isa<InstructionOperandMatcher>(OP))
+      if (!(isa<InstructionOperandMatcher>(OP) ||
+            isa<OtherUseInstructionOperandMatcher>(OP) ||
+            isa<SameOperandMatcherByIdx>(OP)))
         return true;
   return false;
 }
@@ -825,7 +827,9 @@ const PredicateMatcher &RuleMatcher::getFirstCondition() const {
   // operands.
   for (auto &OM : Matcher.operands())
     for (auto &OP : OM->predicates())
-      if (!isa<InstructionOperandMatcher>(OP))
+      if (!(isa<InstructionOperandMatcher>(OP) ||
+            isa<OtherUseInstructionOperandMatcher>(OP) ||
+            isa<SameOperandMatcherByIdx>(OP)))
         return *OP;
 
   llvm_unreachable("Trying to get a condition from an InstructionMatcher with "
@@ -843,7 +847,9 @@ std::unique_ptr<PredicateMatcher> RuleMatcher::popFirstCondition() {
   // operands.
   for (auto &OM : Matcher.operands())
     for (auto &OP : OM->predicates())
-      if (!isa<InstructionOperandMatcher>(OP)) {
+      if (!(isa<InstructionOperandMatcher>(OP) ||
+            isa<OtherUseInstructionOperandMatcher>(OP) ||
+            isa<SameOperandMatcherByIdx>(OP))) {
         std::unique_ptr<PredicateMatcher> Result = std::move(OP);
         OM->eraseNullPredicates();
         return Result;
@@ -1029,7 +1035,9 @@ void RuleMatcher::emit(MatchTable &Table) {
     MA->emitAdditionalPredicates(Table, *this);
 
   // We must also check if it's safe to fold the matched instructions.
-  if (InsnVariableIDs.size() >= 2) {
+  if (InsnVariableIDs.size() >= 2 && llvm::none_of(Actions, [](auto &MA) {
+        return llvm::isa<CheckSafeToMoveInstAction>(MA);
+      })) {
 
     // FIXME: Emit checks to determine it's _actually_ safe to fold and/or
     //        account for unsafe cases.
@@ -1198,6 +1206,23 @@ void SameOperandMatcher::emitPredicateOpcodes(MatchTable &Table,
         << MatchTable::ULEB128Value(OtherInsnVarID)
         << MatchTable::Comment("OtherOpIdx")
         << MatchTable::ULEB128Value(OtherOM.getOpIdx())
+        << MatchTable::LineBreak;
+}
+
+//===- SameOperandMatcherByIdx --------------------------------------------===//
+
+void SameOperandMatcherByIdx::emitPredicateOpcodes(MatchTable &Table,
+                                                   RuleMatcher &Rule) const {
+  const bool IgnoreCopies = Flags & GISF_IgnoreCopies;
+  Table << MatchTable::Opcode(IgnoreCopies
+                                  ? "GIM_CheckIsSameOperandIgnoreCopies"
+                                  : "GIM_CheckIsSameOperand")
+        << MatchTable::Comment("MI") << MatchTable::ULEB128Value(InsnVarID)
+        << MatchTable::Comment("OpIdx") << MatchTable::ULEB128Value(OpIdx)
+        << MatchTable::Comment("OtherMI")
+        << MatchTable::ULEB128Value(OrigInsnID)
+        << MatchTable::Comment("OtherOpIdx")
+        << MatchTable::ULEB128Value(OrigOpIdx)
         << MatchTable::LineBreak;
 }
 
@@ -1891,7 +1916,7 @@ void InstructionMatcher::optimize() {
         }
   }
 
-  if (InsnVarID > 0) {
+  if (InsnVarID > 0 && !PreserveOperandZeroPredicates) {
     assert(!Operands.empty() && "Nested instruction is expected to def a vreg");
     for (auto &OP : Operands[0]->predicates())
       OP.reset();
@@ -1932,6 +1957,38 @@ bool InstructionOperandMatcher::isHigherPriorityThan(
 
   if (const InstructionOperandMatcher *BP =
           dyn_cast<InstructionOperandMatcher>(&B))
+    if (InsnMatcher->isHigherPriorityThan(*BP->InsnMatcher))
+      return true;
+  return false;
+}
+
+//===- OtherUseInstructionOperandMatcher
+//------------------------------------------===//
+
+void OtherUseInstructionOperandMatcher::emitCaptureOpcodes(
+    MatchTable &Table, RuleMatcher &Rule) const {
+  const unsigned NewInsnVarID = InsnMatcher->getInsnVarID();
+  // const bool IgnoreCopies = Flags & GISF_IgnoreCopies;
+  Table << MatchTable::Opcode("GIM_RecordExactOtherUseInsn")
+        << MatchTable::Comment("DefineMI")
+        << MatchTable::ULEB128Value(NewInsnVarID) << MatchTable::Comment("MI")
+        << MatchTable::ULEB128Value(getInsnVarID())
+        << MatchTable::Comment("OpIdx") << MatchTable::ULEB128Value(getOpIdx())
+        << MatchTable::Comment("ExpectedOtherOpIdx")
+        << MatchTable::ULEB128Value(ExpectedOtherOpIdx)
+        << MatchTable::Comment("MIs[" + llvm::to_string(NewInsnVarID) + "]")
+        << MatchTable::LineBreak;
+}
+
+bool OtherUseInstructionOperandMatcher::isHigherPriorityThan(
+    const OperandPredicateMatcher &B) const {
+  if (OperandPredicateMatcher::isHigherPriorityThan(B))
+    return true;
+  if (B.OperandPredicateMatcher::isHigherPriorityThan(*this))
+    return false;
+
+  if (const OtherUseInstructionOperandMatcher *BP =
+          dyn_cast<OtherUseInstructionOperandMatcher>(&B))
     if (InsnMatcher->isHigherPriorityThan(*BP->InsnMatcher))
       return true;
   return false;
@@ -2390,6 +2447,20 @@ void BuildConstantAction::emitActionOpcodes(MatchTable &Table,
         << MatchTable::IntValue(8, Val) << MatchTable::LineBreak;
 }
 
+//===- MarkEraseInstAction
+//----------------------------------------------------===//
+
+void MarkEraseInstAction::emitActionOpcodes(MatchTable &Table,
+                                            RuleMatcher &Rule) const {
+  // Avoid erasing the same inst twice.
+  if (!Rule.tryEraseInsnID(InsnID))
+    return;
+
+  Table << MatchTable::Opcode("GIR_MarkEraseFromParent")
+        << MatchTable::Comment("InsnID") << MatchTable::ULEB128Value(InsnID)
+        << MatchTable::LineBreak;
+}
+
 //===- EraseInstAction ----------------------------------------------------===//
 
 void EraseInstAction::emitActionOpcodes(MatchTable &Table,
@@ -2416,6 +2487,15 @@ bool EraseInstAction::emitActionOpcodesAndDone(MatchTable &Table,
   Table << MatchTable::Opcode("GIR_EraseRootFromParent_Done", -1)
         << MatchTable::LineBreak;
   return true;
+}
+
+//===- CheckSafeToMoveInstAction ------------------------------------------===//
+
+void CheckSafeToMoveInstAction::emitActionOpcodes(MatchTable &Table,
+                                                  RuleMatcher &Rule) const {
+  Table << MatchTable::Opcode("GIM_CheckIsSafeToMove")
+        << MatchTable::Comment("NumInsns") << MatchTable::ULEB128Value(NumInsts)
+        << MatchTable::LineBreak;
 }
 
 //===- ReplaceRegAction ---------------------------------------------------===//

@@ -81,3 +81,17 @@ add_tablegen(llvm-tblgen LLVM
   DEPENDS
   intrinsics_gen # via llvm-min-tablegen
   )
+
+if(USE_GENERATED_TABLES)
+  target_compile_definitions(llvm-tblgen PRIVATE USE_GENERATED_TABLES)
+endif()
+
+set(PATTERNGEN_GISEL_TABLES "" CACHE FILEPATH
+    "C++ include containing generated PatternGen GlobalISel matchers")
+if(PATTERNGEN_GISEL_TABLES)
+  if(NOT EXISTS "${PATTERNGEN_GISEL_TABLES}")
+    message(FATAL_ERROR "Missing PatternGen tables: ${PATTERNGEN_GISEL_TABLES}")
+  endif()
+  target_compile_definitions(llvm-tblgen PRIVATE
+    PATTERNGEN_GISEL_TABLES="${PATTERNGEN_GISEL_TABLES}")
+endif()
