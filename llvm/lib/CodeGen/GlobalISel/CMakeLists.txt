@@ -16,6 +16,7 @@ add_llvm_component_library(LLVMGlobalISel
   InlineAsmLowering.cpp
   InstructionSelect.cpp
   PatternGen.cpp
+  PatternGenGISelTable.cpp
   InstructionSelector.cpp
   LegalityPredicates.cpp
   LegalizeMutations.cpp

@@ -21,6 +21,7 @@
 #include "llvm/CodeGen/GlobalISel/LegalizerInfo.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOptimizationRemarkEmitter.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
@@ -350,7 +351,7 @@ bool InstructionSelect::selectInstr(MachineInstr &MI) {
 
   // We could have folded this instruction away already, making it dead.
   // If so, erase it.
-  if (isTriviallyDead(MI, MRI)) {
+  if (ISel->takePendingErase(MI) || isTriviallyDead(MI, MRI)) {
     LLVM_DEBUG(dbgs() << "Is dead.\n");
     salvageDebugInfo(MRI, MI);
     MI.eraseFromParent();

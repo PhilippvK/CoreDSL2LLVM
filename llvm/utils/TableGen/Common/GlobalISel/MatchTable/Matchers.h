@@ -371,6 +371,7 @@ protected:
                              StringRef FlagName, GISelFlags FlagBit);
 
   friend class InstructionOperandMatcher;
+  friend class OtherUseInstructionOperandMatcher;
 
   InstructionMatcher &allocateInstructionMatcher(StringRef SymbolicName,
                                                  bool AllowNumOpsCheck = true) {
@@ -652,10 +653,12 @@ public:
     OPM_ImmPredicate,
     OPM_Imm,
     OPM_SameOperand,
+    OPM_SameOperandByIdx,
     OPM_ComplexPattern,
     OPM_IntrinsicID,
     OPM_CmpPredicate,
     OPM_Instruction,
+    OPM_OtherInstruction,
     OPM_Int,
     OPM_LiteralInt,
     OPM_LLT,
@@ -773,6 +776,33 @@ public:
     // We can only hoist these if they only refer to the root instruction.
     // We do not support hoisting predicates on non-root instructions.
     return OtherInsnID == 0 && InsnVarID == 0;
+  }
+};
+
+/// Generates code to check that a register operand is defined by the same exact
+/// one as another.
+class SameOperandMatcherByIdx : public OperandPredicateMatcher {
+  unsigned OrigInsnID;
+  unsigned OrigOpIdx;
+
+  GISelFlags Flags;
+
+public:
+  SameOperandMatcherByIdx(unsigned InsnVarID, unsigned OpIdx, unsigned OrigInsnID,
+                     unsigned OrigOpIdx, GISelFlags Flags)
+      : OperandPredicateMatcher(OPM_SameOperandByIdx, InsnVarID, OpIdx),
+        OrigInsnID(OrigInsnID), OrigOpIdx(OrigOpIdx), Flags(Flags) {}
+
+  static bool classof(const PredicateMatcher *P) {
+    return P->getKind() == OPM_SameOperandByIdx;
+  }
+
+  void emitPredicateOpcodes(MatchTable &Table) const override;
+
+  bool isIdentical(const PredicateMatcher &B) const override {
+    return OperandPredicateMatcher::isIdentical(B) &&
+           OrigOpIdx == cast<SameOperandMatcherByIdx>(&B)->OrigOpIdx &&
+           OrigInsnID == cast<SameOperandMatcherByIdx>(&B)->OrigInsnID;
   }
 };
 
@@ -1625,6 +1655,7 @@ public:
 /// * Has a specific opcode.
 /// * Has an nsw/nuw flag or doesn't.
 class InstructionMatcher final : public PredicateListMatcher<PredicateMatcher> {
+  bool PreserveOperandZeroPredicates = false;
 protected:
   using OperandVec = std::vector<std::unique_ptr<OperandMatcher>>;
 
@@ -1665,6 +1696,7 @@ public:
 
   RuleMatcher &getRuleMatcher() const { return Rule; }
 
+  void preserveOperandZeroPredicates() { PreserveOperandZeroPredicates = true; }
   unsigned getInsnVarID() const { return InsnVarID; }
 
   /// Add an operand to the matcher.
@@ -1753,6 +1785,44 @@ public:
 
   static bool classof(const PredicateMatcher *P) {
     return P->getKind() == OPM_Instruction;
+  }
+
+  InstructionMatcher &getInsnMatcher() const { return InsnMatcher; }
+
+  void emitCaptureOpcodes(MatchTable &Table) const;
+  void emitPredicateOpcodes(MatchTable &Table) const override {
+    emitCaptureOpcodes(Table);
+    InsnMatcher.emitPredicateOpcodes(Table);
+  }
+
+  bool isHigherPriorityThan(const OperandPredicateMatcher &B) const override;
+
+  /// Report the maximum number of temporary operands needed by the predicate
+  /// matcher.
+  unsigned countRendererFns() const override {
+    return InsnMatcher.countRendererFns();
+  }
+};
+
+class OtherUseInstructionOperandMatcher : public OperandPredicateMatcher {
+protected:
+  InstructionMatcher &InsnMatcher;
+  GISelFlags Flags;
+  unsigned ExpectedOtherOpIdx;
+
+public:
+  OtherUseInstructionOperandMatcher(unsigned InsnVarID, unsigned OpIdx,
+                                    unsigned ExpectedOtherOpIdx,
+                                    RuleMatcher &Rule, StringRef SymbolicName,
+                                    bool NumOpsCheck = true)
+      : OperandPredicateMatcher(OPM_OtherInstruction, InsnVarID, OpIdx),
+        InsnMatcher(Rule.allocateInstructionMatcher(SymbolicName, NumOpsCheck)),
+        Flags(Rule.getGISelFlags()), ExpectedOtherOpIdx(ExpectedOtherOpIdx) {
+    InsnMatcher.preserveOperandZeroPredicates();
+  }
+
+  static bool classof(const PredicateMatcher *P) {
+    return P->getKind() == OPM_OtherInstruction;
   }
 
   InstructionMatcher &getInsnMatcher() const { return InsnMatcher; }
@@ -2194,7 +2264,9 @@ public:
     AK_DebugComment,
     AK_BuildMI,
     AK_BuildConstantMI,
+    AK_MarkEraseInst,
     AK_EraseInst,
+    AK_CheckSafeToMove,
     AK_ReplaceReg,
     AK_ConstraintOpsToDef,
     AK_ConstraintOpsToRC,
@@ -2318,6 +2390,36 @@ public:
 
   static bool classof(const MatchAction *A) {
     return A->getKind() == AK_BuildConstantMI;
+  }
+
+  void emitActionOpcodes(MatchTable &Table) const override;
+};
+
+class MarkEraseInstAction : public MatchAction {
+  unsigned InsnID;
+
+public:
+  MarkEraseInstAction(unsigned InsnID)
+      : MatchAction(AK_MarkEraseInst), InsnID(InsnID) {}
+
+  unsigned getInsnID() const { return InsnID; }
+
+  static bool classof(const MatchAction *A) {
+    return A->getKind() == AK_MarkEraseInst;
+  }
+
+  void emitActionOpcodes(MatchTable &Table) const override;
+};
+
+class CheckSafeToMoveInstAction : public MatchAction {
+  unsigned NumInsts;
+
+public:
+  CheckSafeToMoveInstAction(unsigned NumInsts)
+      : MatchAction(AK_CheckSafeToMove), NumInsts(NumInsts) {}
+
+  static bool classof(const MatchAction *A) {
+    return A->getKind() == AK_CheckSafeToMove;
   }
 
   void emitActionOpcodes(MatchTable &Table) const override;
