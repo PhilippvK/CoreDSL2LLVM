@@ -994,6 +994,11 @@ InstructionCost RISCVTTIImpl::getScalarizationOverhead(
   if (isa<ScalableVectorType>(Ty))
     return InstructionCost::getInvalid();
 
+  // GPR32V has no RVV container type or vslide-based build-vector sequence.
+  if (ST->hasGPR32V() && !ST->hasVInstructions())
+    return BaseT::getScalarizationOverhead(Ty, DemandedElts, Insert, Extract,
+                                           CostKind, ForPoisonSrc, VL);
+
   // TODO: Add proper cost model for P extension fixed vectors (e.g., v4i16)
   // For now, skip all fixed vector cost analysis when P extension is available
   // to avoid crashes in getMinRVVVectorSizeInBits()
@@ -2421,6 +2426,11 @@ InstructionCost RISCVTTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
                                                  const Value *Op0,
                                                  const Value *Op1) const {
   assert(Val->isVectorTy() && "This must be a vector type");
+
+  // Packed GPR vectors do not have RVV vector lengths or slide instructions.
+  // Use the generic extract/insert estimate rather than entering the RVV model.
+  if (ST->hasGPR32V() && !ST->hasVInstructions() && isa<FixedVectorType>(Val))
+    return BaseT::getVectorInstrCost(Opcode, Val, CostKind, Index, Op0, Op1);
 
   // TODO: Add proper cost model for P extension fixed vectors (e.g., v4i16)
   // For now, skip all fixed vector cost analysis when P extension is available
