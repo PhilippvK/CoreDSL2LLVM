@@ -146,7 +146,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
           .legalIf(all(
               typeInSet(0, XCVVecTys),
               LegalityPredicate([=, &ST](const LegalityQuery &Query) {
-                return ST.hasVendorXCVsimd();
+                return ST.hasGPR32V() && !ST.is64Bit();
               }
           )))
           .customFor(ST.is64Bit(), {s32})
@@ -159,7 +159,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
           .legalIf(all(
               typeInSet(0, XCVVecTys),
               LegalityPredicate([=, &ST](const LegalityQuery &Query) {
-                return ST.hasVendorXCVsimd();
+                return ST.hasGPR32V() && !ST.is64Bit();
               }
           )))
           .widenScalarToNextPow2(0)
@@ -353,7 +353,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
         {{s64, p0, s64, getScalarMemAlign(64)}});
   }
 
-  if (ST.hasVendorXCVsimd()) {
+  if (ST.hasGPR32V() && !ST.is64Bit()) {
     LoadActions.bitcastIf(LegalityPredicates::typeInSet(0, XCVVecTys),
                                LegalizeMutations::changeTo(0, LLT::scalar(32)));
     StoreActions.bitcastIf(LegalityPredicates::typeInSet(0, XCVVecTys),
@@ -368,8 +368,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
             LegalityPredicates::typeIs(1, s32),
             LegalityPredicates::typeInSet(0, XCVVecTys)));
 
-    getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT).legalFor(XCVVecTys);
-    ShiftActions.legalFor(XCVVecTys);
+    // Additional packed operations are enabled only as their selectors are tested.
   }
 
   // Vector loads/stores.

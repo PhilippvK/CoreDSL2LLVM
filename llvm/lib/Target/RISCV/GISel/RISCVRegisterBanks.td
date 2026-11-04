@@ -10,7 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 /// General Purpose Registers: X.
-def GPRBRegBank : RegisterBank<"GPRB", [GPR]>;
+def GPRBRegBank : RegisterBank<"GPRB", [GPR, GPR32V2, GPR32V4]>;
 
 /// Floating Point Registers: F.
 def FPRBRegBank : RegisterBank<"FPRB", [FPR64]>;

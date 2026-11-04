@@ -1041,9 +1041,9 @@ def HasStdExtSvinval : Predicate<"Subtarget->hasStdExtSvinval()">,
 def FeatureGPR32V
    : SubtargetFeature<"gpr32v", "HasGPR32V", "true", "Support SIMD in 32-bit GPRs">;
 def HasGPR32V
-   : Predicate<"Subtarget->hasGPR32V)">,
+   : Predicate<"Subtarget->hasGPR32V()">,
      AssemblerPredicate<(any_of FeatureGPR32V),
-                        "'GPR32V' (TODO)">;
+                        "'GPR32V' (Packed SIMD in 32-bit integer registers)">;
 
 def FeatureStdExtSvnapot
     : RISCVExtension<1, 0, "NAPOT Translation Contiguity">;

@@ -2421,3 +2421,17 @@ include "patternsInstrFormat.td"
 #ifdef USE_GENERATED_PATTERNS
 include "patterns.td"
 #endif
+
+// PATTERNGEN_GPR32V_BRIDGES_BEGIN
+// Packed vectors and i32 share the same physical integer registers.
+let Predicates = [HasGPR32V, IsRV32] in {
+def : Pat<(v4i8 (bitconvert (i32 GPR:$src))),
+          (COPY_TO_REGCLASS GPR:$src, GPR32V4)>;
+def : Pat<(i32 (bitconvert (v4i8 GPR32V4:$src))),
+          (COPY_TO_REGCLASS GPR32V4:$src, GPR)>;
+def : Pat<(v2i16 (bitconvert (i32 GPR:$src))),
+          (COPY_TO_REGCLASS GPR:$src, GPR32V2)>;
+def : Pat<(i32 (bitconvert (v2i16 GPR32V2:$src))),
+          (COPY_TO_REGCLASS GPR32V2:$src, GPR)>;
+}
+// PATTERNGEN_GPR32V_BRIDGES_END
