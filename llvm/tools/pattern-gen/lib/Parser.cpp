@@ -1602,6 +1602,16 @@ auto MakeImplFunction(llvm::Module *mod, CDSLInstr &instr) {
     if (field.type & CDSLInstr::OUT)
       func->getArg(argIdx)->addAttr(llvm::Attribute::NoAlias);
 
+    // These pointers model register storage, not addresses accessed by an ISA
+    // memory instruction. Preserve natural register alignment so packed lane
+    // stores do not get split during scalar load/store legalization.
+    if (func->getArg(argIdx)->getType()->isPointerTy()) {
+      unsigned Bytes = (field.type & CDSLInstr::IS_32_BIT) ? 4 : xlen / 8;
+      func->getArg(argIdx)->addAttr(
+          llvm::Attribute::getWithAlignment(ctx, llvm::Align(Bytes)));
+    }
+
+
     ++argIdx;
   }
 
