@@ -96,8 +96,8 @@ static DecodeStatus DecodeSimpleRegisterClass(MCInst &Inst, uint32_t RegNo,
 constexpr auto DecodeGPRRegisterClass =
     DecodeSimpleRegisterClass<RISCV::X0, 32, /*RVELimit=*/16>;
 
-constexpr auto DecodePulpV2RegisterClass = DecodeGPRRegisterClass;
-constexpr auto DecodePulpV4RegisterClass = DecodeGPRRegisterClass;
+constexpr auto DecodeGPR32V2RegisterClass = DecodeGPRRegisterClass;
+constexpr auto DecodeGPR32V4RegisterClass = DecodeGPRRegisterClass;
 
 static DecodeStatus DecodeGPRX1X5RegisterClass(MCInst &Inst, uint32_t RegNo,
                                                uint64_t Address,

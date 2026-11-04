@@ -171,6 +171,13 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   // Set up the register classes.
   addRegisterClass(XLenVT, &RISCV::GPRRegClass);
 
+  // Packed byte/halfword vectors use integer registers, not the RVV bank.
+  if (Subtarget.hasGPR32V() && !Subtarget.is64Bit()) {
+    addRegisterClass(MVT::v4i8, &RISCV::GPR32V4RegClass);
+    addRegisterClass(MVT::v2i16, &RISCV::GPR32V2RegClass);
+  }
+
+
   if (Subtarget.hasStdExtZfhmin())
     addRegisterClass(MVT::f16, &RISCV::FPR16RegClass);
   if (Subtarget.hasStdExtZfbfmin() || Subtarget.hasVendorXAndesBFHCvt())

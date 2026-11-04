@@ -971,7 +971,7 @@ def : RISCVRegisterClass<[XLenVT], 32, (add SF_VCIX_STATE)> {
 }
 
 // LLVMGEN: CORE-V SIMD Register Info
-def PulpV2 : RegisterClass<"RISCV", [v2i16], 32, (add
+def GPR32V2 : RegisterClass<"RISCV", [v2i16], 32, (add
     (sequence "X%u", 10, 17),
     (sequence "X%u", 5, 7),
     (sequence "X%u", 28, 31),
@@ -982,7 +982,7 @@ def PulpV2 : RegisterClass<"RISCV", [v2i16], 32, (add
     let RegInfos = XLenRI;
 }
 
-def PulpV4 : RegisterClass<"RISCV", [v4i8], 32, (add
+def GPR32V4 : RegisterClass<"RISCV", [v4i8], 32, (add
     (sequence "X%u", 10, 17),
     (sequence "X%u", 5, 7),
     (sequence "X%u", 28, 31),

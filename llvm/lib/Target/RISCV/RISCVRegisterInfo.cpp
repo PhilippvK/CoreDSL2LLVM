@@ -140,6 +140,14 @@ const TargetRegisterClass *
 RISCVRegisterInfo::getRegClassForTypeOnBank(LLT Ty, const RegisterBank &RB,
                                             bool Is64Bit) const {
   if (RB.getID() == RISCV::GPRBRegBankID) {
+    // Packed vectors are admitted to the GPR bank by feature-gated legalization.
+    if (!Is64Bit) {
+      if (Ty == LLT::fixed_vector(4, 8))
+        return &RISCV::GPR32V4RegClass;
+      if (Ty == LLT::fixed_vector(2, 16))
+        return &RISCV::GPR32V2RegClass;
+    }
+
     if (Ty.getSizeInBits() <= 32 || (Is64Bit && Ty.getSizeInBits() == 64))
       return &RISCV::GPRRegClass;
   }
