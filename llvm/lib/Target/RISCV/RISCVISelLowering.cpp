@@ -175,6 +175,15 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   if (Subtarget.hasGPR32V() && !Subtarget.is64Bit()) {
     addRegisterClass(MVT::v4i8, &RISCV::GPR32V4RegClass);
     addRegisterClass(MVT::v2i16, &RISCV::GPR32V2RegClass);
+    // Memory still transfers one scalar word; the packed representation is a
+    // register view. This also retains the ordinary scalar alignment handling.
+    for (MVT VT : {MVT::v4i8, MVT::v2i16}) {
+      setOperationAction(ISD::LOAD, VT, Promote);
+      AddPromotedToType(ISD::LOAD, VT, MVT::i32);
+      setOperationAction(ISD::STORE, VT, Promote);
+      AddPromotedToType(ISD::STORE, VT, MVT::i32);
+    }
+
   }
 
 
