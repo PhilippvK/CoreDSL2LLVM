@@ -11,3 +11,10 @@ The verifier checks both selectors at O0/O2/O3, optimized subtraction operand
 order, aligned/unaligned transfers, decoding and disabled-feature behavior.
 No direct GISel matcher is used. For a Seal5-generated backend use
 `check ... --extension xpackedsimd32` instead; see Seal5 examples/packed_simd.
+
+Packed representation (`+gpr32v`) is separate from arithmetic capabilities
+(`+gpr32v-add` and `+gpr32v-sub`). The standalone verifier enables both operation
+features. Generated ISA extensions should imply the operations they implement.
+`PackedFallback.ll` covers widening/multiply/shift/narrowing, narrow memory,
+selects, shuffles and operation-disabled fallback; run its FileCheck commands
+against the standalone fixture backend after prepare/build.
