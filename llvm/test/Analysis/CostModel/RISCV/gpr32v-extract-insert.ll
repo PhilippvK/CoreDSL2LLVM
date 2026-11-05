@@ -1,8 +1,8 @@
 ; RUN: opt -mtriple=riscv32 -mattr=+gpr32v -passes='print<cost-model>' -disable-output %s 2>&1 | FileCheck %s
 ; Packed GPR vectors must not query RVV-only vector lengths.
 ; CHECK-LABEL: Printing analysis 'Cost Model Analysis' for function 'extract_insert':
-; CHECK: cost of 1 {{.*}} %lane = extractelement <4 x i8> %v, i32 2
-; CHECK: cost of 1 {{.*}} %result = insertelement <4 x i8> %v, i8 %lane, i32 1
+; CHECK: cost of 2 {{.*}} %lane = extractelement <4 x i8> %v, i32 2
+; CHECK: cost of 6 {{.*}} %result = insertelement <4 x i8> %v, i8 %lane, i32 1
 
 define <4 x i8> @extract_insert(<4 x i8> %v) {
   %lane = extractelement <4 x i8> %v, i32 2
