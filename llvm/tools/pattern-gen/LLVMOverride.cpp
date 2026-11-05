@@ -508,6 +508,10 @@ std::unique_ptr<TargetMachine> getTargetMachine(bool Is64Bit,
   TargetOptions Options = codegen::InitTargetOptionsFromCodeGenFlags(TheTriple);
   std::string CPUStr = codegen::getCPUStr(),
               FeaturesStr = codegen::getFeaturesStr() + Mattr;
+  // The analysis target models candidate instructions before their ISA exists.
+  // Final backends instead enable each operation through the generated feature.
+  if (FeaturesStr.find("+gpr32v") != std::string::npos)
+    FeaturesStr += ",+gpr32v-add,+gpr32v-sub";
 
   auto MAttrs = codegen::getMAttrs();
 

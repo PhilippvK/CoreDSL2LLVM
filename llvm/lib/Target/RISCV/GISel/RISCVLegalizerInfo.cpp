@@ -131,6 +131,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
 
   using namespace TargetOpcode;
 
+
   auto BoolVecTys = {nxv1s1, nxv2s1, nxv4s1, nxv8s1, nxv16s1, nxv32s1, nxv64s1};
 
   auto IntOrFPVecTys = {nxv1s8,   nxv2s8,  nxv4s8,  nxv8s8,  nxv16s8, nxv32s8,
@@ -140,30 +141,34 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
 
   auto PtrVecTys = {nxv1p0, nxv2p0, nxv4p0, nxv8p0, nxv16p0};
 
-  getActionDefinitionsBuilder({G_ADD, G_SUB})
-          .legalFor({sXLen})
-          .legalIf(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST))
-          .legalIf(all(
-              typeInSet(0, XCVVecTys),
-              LegalityPredicate([=, &ST](const LegalityQuery &Query) {
-                return ST.hasGPR32V() && !ST.is64Bit();
-              }
-          )))
-          .customFor(ST.is64Bit(), {s32})
-          .widenScalarToNextPow2(0)
-          .clampScalar(0, sXLen, sXLen);
+  auto PackedFallback = [&ST](unsigned Idx) -> LegalityPredicate {
+    return [Idx, &ST](const LegalityQuery &Q) {
+      return ST.hasGPR32V() && !ST.is64Bit() && !ST.hasVInstructions() &&
+             Q.Types[Idx].isVector() && !Q.Types[Idx].isScalable();
+    };
+  };
+
+  for (unsigned Op : {G_ADD, G_SUB}) {
+    bool HasPackedOp = Op == G_ADD ? ST.hasGPR32VAdd() : ST.hasGPR32VSub();
+    getActionDefinitionsBuilder(Op)
+        .legalFor({sXLen})
+        .legalIf(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST))
+        .legalIf(all(PackedFallback(0), typeInSet(0, XCVVecTys),
+                     LegalityPredicate([HasPackedOp](const LegalityQuery &) { return HasPackedOp; })))
+        .scalarizeIf(PackedFallback(0), 0)
+        .customFor(ST.is64Bit(), {s32})
+        .widenScalarToNextPow2(0)
+        .clampScalar(0, sXLen, sXLen);
+  }
 
   getActionDefinitionsBuilder({G_AND, G_OR, G_XOR})
-          .legalFor({sXLen})
-          .legalIf(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST))
-          .legalIf(all(
-              typeInSet(0, XCVVecTys),
-              LegalityPredicate([=, &ST](const LegalityQuery &Query) {
-                return ST.hasGPR32V() && !ST.is64Bit();
-              }
-          )))
-          .widenScalarToNextPow2(0)
-          .clampScalar(0, sXLen, sXLen);
+      .legalFor({sXLen})
+      .legalIf(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST))
+      .bitcastIf(all(PackedFallback(0), typeInSet(0, XCVVecTys)),
+                 changeTo(0, s32))
+      .scalarizeIf(PackedFallback(0), 0)
+      .widenScalarToNextPow2(0)
+      .clampScalar(0, sXLen, sXLen);
 
   getActionDefinitionsBuilder(
       {G_UADDE, G_UADDO, G_USUBE, G_USUBO, G_READ_REGISTER, G_WRITE_REGISTER})
@@ -179,7 +184,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .lower();
 
   auto &ShiftActions = getActionDefinitionsBuilder({G_SHL, G_ASHR, G_LSHR});
-  ShiftActions.legalFor({{sXLen, sXLen}})
+  ShiftActions.scalarizeIf(PackedFallback(0), 0)
+              .legalFor({{sXLen, sXLen}})
               .customFor(ST.is64Bit(), {{s32, s32}})
               .widenScalarToNextPow2(0)
               .clampScalar(1, sXLen, sXLen)
@@ -191,9 +197,12 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .legalIf(all(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST),
                    typeIsLegalIntOrFPVec(1, IntOrFPVecTys, ST)))
       .customIf(typeIsLegalBoolVec(1, BoolVecTys, ST))
+      .scalarizeIf(PackedFallback(0), 0)
       .maxScalar(0, sXLen);
 
-  getActionDefinitionsBuilder(G_TRUNC).alwaysLegal();
+  getActionDefinitionsBuilder(G_TRUNC)
+      .scalarizeIf(PackedFallback(0), 0)
+      .alwaysLegal();
 
   getActionDefinitionsBuilder(G_SEXT_INREG)
       .customFor({sXLen})
@@ -208,6 +217,11 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
     if (XLen == 32 && ST.hasStdExtD()) {
       MergeUnmergeActions.legalIf(
           all(typeIs(BigTyIdx, s64), typeIs(LitTyIdx, s32)));
+    }
+    if (ST.hasGPR32V() && !ST.is64Bit() && !ST.hasVInstructions()) {
+      if (Op == G_UNMERGE_VALUES)
+        MergeUnmergeActions.lowerIf(typeInSet(BigTyIdx, XCVVecTys));
+      MergeUnmergeActions.scalarizeIf(PackedFallback(BigTyIdx), BigTyIdx);
     }
     MergeUnmergeActions.widenScalarToNextPow2(LitTyIdx, XLen)
         .widenScalarToNextPow2(BigTyIdx, XLen)
@@ -291,6 +305,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .legalFor(ST.is64Bit(), {s64})
       .legalIf(typeIsLegalBoolVec(0, BoolVecTys, ST))
       .legalIf(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST))
+      .scalarizeIf(PackedFallback(0), 0)
       .widenScalarToNextPow2(0)
       .clampScalar(0, s16, sXLen);
 
@@ -301,6 +316,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .legalFor({s32, sXLen, p0})
       .legalIf(typeIsLegalBoolVec(0, BoolVecTys, ST))
       .legalIf(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST))
+      .scalarizeIf(PackedFallback(0), 0)
       .widenScalarToNextPow2(0)
       .clampScalar(0, s32, sXLen);
 
@@ -308,6 +324,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .legalFor({{sXLen, sXLen}, {sXLen, p0}})
       .legalIf(all(typeIsLegalBoolVec(0, BoolVecTys, ST),
                    typeIsLegalIntOrFPVec(1, IntOrFPVecTys, ST)))
+      .scalarizeIf(PackedFallback(1), 1)
       .widenScalarOrEltToNextPow2OrMinSize(1, 8)
       .clampScalar(1, sXLen, sXLen)
       .clampScalar(0, sXLen, sXLen);
@@ -317,6 +334,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
       .legalIf(all(typeIsLegalIntOrFPVec(0, IntOrFPVecTys, ST),
                    typeIsLegalBoolVec(1, BoolVecTys, ST)))
       .legalFor(XLen == 64 || ST.hasStdExtD(), {{s64, sXLen}})
+      .scalarizeIf(PackedFallback(0), 0)
       .widenScalarToNextPow2(0)
       .clampScalar(0, s32, (XLen == 64 || ST.hasStdExtD()) ? s64 : s32)
       .clampScalar(1, sXLen, sXLen);
@@ -383,6 +401,12 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
         .legalIf(LegalityPredicates::all(
             LegalityPredicates::typeIs(1, s32),
             LegalityPredicates::typeInSet(0, XCVVecTys)));
+
+    getActionDefinitionsBuilder(G_BUILD_VECTOR)
+        .customIf(LegalityPredicates::typeInSet(0, XCVVecTys))
+        // Other vector builds are artifacts of scalarization. Their users
+        // unmerge them and the artifact combiner removes the temporary vector.
+        .legalIf(PackedFallback(0));
 
     // Additional packed operations are enabled only as their selectors are tested.
   }
@@ -452,6 +476,9 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
     }
   }
 
+  LoadActions.scalarizeIf(PackedFallback(0), 0);
+  StoreActions.scalarizeIf(PackedFallback(0), 0);
+
   LoadActions.widenScalarToNextPow2(0, /* MinSize = */ 8)
       .lowerIfMemSizeNotByteSizePow2()
       .clampScalar(0, s16, sXLen)
@@ -482,7 +509,9 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   getActionDefinitionsBuilder(G_BRINDIRECT).legalFor({p0});
 
   getActionDefinitionsBuilder(G_PHI)
+      .legalFor(ST.hasGPR32V() && !ST.is64Bit(), XCVVecTys)
       .legalFor({p0, s32, sXLen})
+      .scalarizeIf(PackedFallback(0), 0)
       .widenScalarToNextPow2(0)
       .clampScalar(0, s32, sXLen);
 
@@ -492,7 +521,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   if (ST.hasStdExtZmmul()) {
     getActionDefinitionsBuilder(G_MUL)
         .legalFor({sXLen})
-        .widenScalarToNextPow2(0)
+        .scalarizeIf(PackedFallback(0), 0)
+      .widenScalarToNextPow2(0)
         .clampScalar(0, sXLen, sXLen);
 
     // clang-format off
@@ -505,7 +535,8 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   } else {
     getActionDefinitionsBuilder(G_MUL)
         .libcallFor({sXLen, sDoubleXLen})
-        .widenScalarToNextPow2(0)
+        .scalarizeIf(PackedFallback(0), 0)
+      .widenScalarToNextPow2(0)
         .clampScalar(0, sXLen, sDoubleXLen);
 
     getActionDefinitionsBuilder({G_SMULH, G_UMULH}).lowerFor({sXLen});
@@ -554,6 +585,7 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
 
   getActionDefinitionsBuilder({G_UMAX, G_UMIN, G_SMAX, G_SMIN})
       .legalFor(ST.hasStdExtZbb() || ST.hasVendorXCValu(), {sXLen})
+      .scalarizeIf(PackedFallback(0), 0)
       .minScalar(ST.hasStdExtZbb(), 0, sXLen)
       .lower();
 
@@ -802,6 +834,23 @@ RISCVLegalizerInfo::RISCVLegalizerInfo(const RISCVSubtarget &ST)
   getActionDefinitionsBuilder(G_FENCE).alwaysLegal();
 
   getActionDefinitionsBuilder({G_TRAP, G_DEBUGTRAP, G_UBSANTRAP}).alwaysLegal();
+
+  getActionDefinitionsBuilder(G_CONCAT_VECTORS)
+      .customIf(all(PackedFallback(0), typeInSet(0, XCVVecTys)))
+      .legalIf(PackedFallback(0));
+  getActionDefinitionsBuilder(G_EXTRACT_VECTOR_ELT)
+      .bitcastIf(all(PackedFallback(1), typeInSet(1, XCVVecTys)),
+                 changeTo(1, s32))
+      .scalarizeIf(PackedFallback(1), 1);
+  getActionDefinitionsBuilder(G_INSERT_VECTOR_ELT)
+      .bitcastIf(all(PackedFallback(0), typeInSet(0, XCVVecTys)),
+                 changeTo(0, s32))
+      .scalarizeIf(PackedFallback(0), 0);
+  getActionDefinitionsBuilder(G_SHUFFLE_VECTOR)
+      .customIf(PackedFallback(0))
+      .unsupported();
+  getActionDefinitionsBuilder(G_BITCAST)
+      .lowerIf(LegalityPredicates::any(PackedFallback(0), PackedFallback(1)));
 
   verify(*ST.getInstrInfo());
 }
@@ -1489,6 +1538,51 @@ bool RISCVLegalizerInfo::legalizeCustom(
   MachineIRBuilder &MIRBuilder = Helper.MIRBuilder;
   MachineRegisterInfo &MRI = *MIRBuilder.getMRI();
   MachineFunction &MF = *MI.getParent()->getParent();
+  if (MI.getOpcode() == TargetOpcode::G_SHUFFLE_VECTOR) {
+    SmallVector<Register, 16> Inputs, Outputs;
+    LLT EltTy = MRI.getType(MI.getOperand(1).getReg()).getElementType();
+    for (unsigned I : {1U, 2U}) {
+      auto Parts = MIRBuilder.buildUnmerge(EltTy, MI.getOperand(I).getReg());
+      for (unsigned J = 0; J < Parts->getNumDefs(); ++J)
+        Inputs.push_back(Parts.getReg(J));
+    }
+    for (int I : MI.getOperand(3).getShuffleMask())
+      Outputs.push_back(I < 0 ? MIRBuilder.buildUndef(EltTy).getReg(0)
+                              : Inputs[I]);
+    MIRBuilder.buildBuildVector(MI.getOperand(0).getReg(), Outputs);
+    MI.eraseFromParent();
+    return true;
+  }
+  if (MI.getOpcode() == TargetOpcode::G_CONCAT_VECTORS) {
+    SmallVector<Register, 8> Elements;
+    for (unsigned I = 1; I < MI.getNumOperands(); ++I) {
+      Register Src = MI.getOperand(I).getReg();
+      auto Parts = MIRBuilder.buildUnmerge(MRI.getType(Src).getElementType(), Src);
+      for (unsigned J = 0; J < Parts->getNumDefs(); ++J)
+        Elements.push_back(Parts.getReg(J));
+    }
+    MIRBuilder.buildBuildVector(MI.getOperand(0).getReg(), Elements);
+    MI.eraseFromParent();
+    return true;
+  }
+  if (MI.getOpcode() == TargetOpcode::G_BUILD_VECTOR) {
+    Register Dst = MI.getOperand(0).getReg();
+    LLT Ty = MRI.getType(Dst);
+    unsigned Bits = Ty.getScalarSizeInBits();
+    LLT WordTy = LLT::scalar(32);
+    auto Packed = MIRBuilder.buildConstant(WordTy, 0);
+    for (unsigned I = 1; I < MI.getNumOperands(); ++I) {
+      auto Lane = MIRBuilder.buildZExtOrTrunc(WordTy, MI.getOperand(I).getReg());
+      auto Mask = MIRBuilder.buildConstant(WordTy, (1U << Bits) - 1);
+      Lane = MIRBuilder.buildAnd(WordTy, Lane, Mask);
+      auto Shift = MIRBuilder.buildConstant(WordTy, (I - 1) * Bits);
+      Lane = MIRBuilder.buildShl(WordTy, Lane, Shift);
+      Packed = MIRBuilder.buildOr(WordTy, Packed, Lane);
+    }
+    MIRBuilder.buildBitcast(Dst, Packed);
+    MI.eraseFromParent();
+    return true;
+  }
   switch (MI.getOpcode()) {
   default:
     // No idea what to do.

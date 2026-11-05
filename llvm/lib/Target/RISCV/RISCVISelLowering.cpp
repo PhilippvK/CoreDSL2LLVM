@@ -178,6 +178,34 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     // Memory still transfers one scalar word; the packed representation is a
     // register view. This also retains the ordinary scalar alignment handling.
     for (MVT VT : {MVT::v4i8, MVT::v2i16}) {
+      setOperationAction(ISD::ADD, VT, Subtarget.hasGPR32VAdd() ? Legal : Expand);
+      setOperationAction(ISD::SUB, VT, Subtarget.hasGPR32VSub() ? Legal : Expand);
+      // Only the generated packed arithmetic is selected directly. All other
+      // operations must have scalar expansion paths, never accidental RVV nodes.
+      for (unsigned Opc : {ISD::MUL, ISD::SHL, ISD::SRL, ISD::SRA,
+                           ISD::SDIV, ISD::UDIV, ISD::SREM, ISD::UREM,
+                           ISD::SMIN, ISD::SMAX, ISD::UMIN, ISD::UMAX,
+                           ISD::SETCC, ISD::VSELECT, ISD::SELECT,
+                           ISD::SIGN_EXTEND, ISD::ZERO_EXTEND, ISD::ANY_EXTEND,
+                           ISD::TRUNCATE, ISD::CONCAT_VECTORS,
+                           ISD::EXTRACT_SUBVECTOR, ISD::INSERT_SUBVECTOR})
+        setOperationAction(Opc, VT, Expand);
+      for (unsigned Opc : {ISD::AND, ISD::OR, ISD::XOR}) {
+        setOperationAction(Opc, VT, Promote);
+        AddPromotedToType(Opc, VT, MVT::i32);
+      }
+      for (unsigned Opc : {ISD::EXTRACT_VECTOR_ELT, ISD::INSERT_VECTOR_ELT,
+                           ISD::VECTOR_SHUFFLE, ISD::SCALAR_TO_VECTOR})
+        setOperationAction(Opc, VT, Custom);
+      setTruncStoreAction(VT, VT.changeVectorElementType(MVT::i1), Expand);
+      if (VT == MVT::v2i16) {
+        setTruncStoreAction(VT, MVT::v2i8, Expand);
+        for (unsigned Ext : {ISD::EXTLOAD, ISD::ZEXTLOAD, ISD::SEXTLOAD})
+          setLoadExtAction(Ext, VT, MVT::v2i8, Expand);
+      }
+      for (unsigned Ext : {ISD::EXTLOAD, ISD::ZEXTLOAD, ISD::SEXTLOAD})
+        setLoadExtAction(Ext, VT, VT.changeVectorElementType(MVT::i1), Expand);
+      setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
       setOperationAction(ISD::LOAD, VT, Promote);
       AddPromotedToType(ISD::LOAD, VT, MVT::i32);
       setOperationAction(ISD::STORE, VT, Promote);
@@ -3228,6 +3256,8 @@ RISCVTargetLowering::decomposeSubvectorInsertExtractToSubRegs(
 // Permit combining of mask vectors as BUILD_VECTOR never expands to scalar
 // stores for those types.
 bool RISCVTargetLowering::mergeStoresAfterLegalization(EVT VT) const {
+  if (Subtarget.hasGPR32V() && !Subtarget.hasVInstructions())
+    return false;
   if (Subtarget.hasStdExtP() && !Subtarget.is64Bit() &&
       (VT == MVT::i32 || VT == MVT::v2i16 || VT == MVT::v4i8))
     return false;
@@ -7219,6 +7249,8 @@ SDValue RISCVTargetLowering::lowerVECTOR_SHUFFLE(SDValue Op,
 }
 
 bool RISCVTargetLowering::isShuffleMaskLegal(ArrayRef<int> M, EVT VT) const {
+  if (Subtarget.hasGPR32V() && !Subtarget.hasVInstructions())
+    return VT == MVT::v4i8 || VT == MVT::v2i16;
   // Only support legal VTs for other shuffles for now.
   if (!isTypeLegal(VT) || !Subtarget.hasVInstructions())
     return false;
@@ -8153,6 +8185,84 @@ static SDValue lowerCttzElts(SDValue Op, SelectionDAG &DAG,
 
 SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
                                             SelectionDAG &DAG) const {
+  if (Subtarget.hasGPR32V() && !Subtarget.is64Bit()) {
+    auto IsPacked = [](EVT VT) {
+      return VT == MVT::v4i8 || VT == MVT::v2i16;
+    };
+    SDLoc DL(Op);
+    if (Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT &&
+        IsPacked(Op.getOperand(0).getValueType())) {
+      unsigned Bits = Op.getOperand(0).getValueType().getScalarSizeInBits();
+      SDValue Word = DAG.getBitcast(MVT::i32, Op.getOperand(0));
+      SDValue Index = DAG.getZExtOrTrunc(Op.getOperand(1), DL, MVT::i32);
+      SDValue Shift = DAG.getNode(ISD::MUL, DL, MVT::i32, Index,
+                                  DAG.getConstant(Bits, DL, MVT::i32));
+      Word = DAG.getNode(ISD::SRL, DL, MVT::i32, Word, Shift);
+      Word = DAG.getNode(ISD::AND, DL, MVT::i32, Word,
+                         DAG.getConstant((1U << Bits) - 1, DL, MVT::i32));
+      return DAG.getZExtOrTrunc(Word, DL, Op.getValueType());
+    }
+    if (IsPacked(Op.getValueType())) {
+      unsigned Bits = Op.getValueType().getScalarSizeInBits();
+      SDValue Mask = DAG.getConstant((1U << Bits) - 1, DL, MVT::i32);
+      if (Op.getOpcode() == ISD::SCALAR_TO_VECTOR) {
+        SDValue Lane = DAG.getZExtOrTrunc(Op.getOperand(0), DL, MVT::i32);
+        return DAG.getBitcast(Op.getValueType(),
+                             DAG.getNode(ISD::AND, DL, MVT::i32, Lane, Mask));
+      }
+      if (Op.getOpcode() == ISD::INSERT_VECTOR_ELT) {
+        SDValue Word = DAG.getBitcast(MVT::i32, Op.getOperand(0));
+        SDValue Lane = DAG.getZExtOrTrunc(Op.getOperand(1), DL, MVT::i32);
+        SDValue Index = DAG.getZExtOrTrunc(Op.getOperand(2), DL, MVT::i32);
+        SDValue Shift = DAG.getNode(ISD::MUL, DL, MVT::i32, Index,
+                                    DAG.getConstant(Bits, DL, MVT::i32));
+        Lane = DAG.getNode(ISD::AND, DL, MVT::i32, Lane, Mask);
+        Lane = DAG.getNode(ISD::SHL, DL, MVT::i32, Lane, Shift);
+        Mask = DAG.getNode(ISD::SHL, DL, MVT::i32, Mask, Shift);
+        Mask = DAG.getNode(ISD::XOR, DL, MVT::i32, Mask,
+                           DAG.getAllOnesConstant(DL, MVT::i32));
+        Word = DAG.getNode(ISD::AND, DL, MVT::i32, Word, Mask);
+        return DAG.getBitcast(Op.getValueType(),
+                             DAG.getNode(ISD::OR, DL, MVT::i32, Word, Lane));
+      }
+      if (Op.getOpcode() == ISD::VECTOR_SHUFFLE) {
+        auto *Shuffle = cast<ShuffleVectorSDNode>(Op);
+        unsigned Lanes = Op.getValueType().getVectorNumElements();
+        SmallVector<SDValue, 4> Elements;
+        for (int I : Shuffle->getMask()) {
+          if (I < 0) {
+            Elements.push_back(DAG.getUNDEF(MVT::i32));
+            continue;
+          }
+          Elements.push_back(DAG.getNode(
+              ISD::EXTRACT_VECTOR_ELT, DL, MVT::i32,
+              Op.getOperand(I / Lanes),
+              DAG.getConstant(I % Lanes, DL, MVT::i32)));
+        }
+        return DAG.getBuildVector(Op.getValueType(), DL, Elements);
+      }
+    }
+  }
+  if (Subtarget.hasGPR32V() && !Subtarget.is64Bit() &&
+      Op.getOpcode() == ISD::BUILD_VECTOR &&
+      (Op.getValueType() == MVT::v4i8 || Op.getValueType() == MVT::v2i16)) {
+    SDLoc DL(Op);
+    unsigned Bits = Op.getValueType().getScalarSizeInBits();
+    SDValue Packed = DAG.getConstant(0, DL, MVT::i32);
+    for (unsigned I = 0; I < Op.getNumOperands(); ++I) {
+      SDValue Lane = Op.getOperand(I);
+      if (Lane.isUndef())
+        continue;
+      Lane = DAG.getZExtOrTrunc(Lane, DL, MVT::i32);
+      Lane = DAG.getNode(ISD::AND, DL, MVT::i32, Lane,
+                         DAG.getConstant((1U << Bits) - 1, DL, MVT::i32));
+      Lane = DAG.getNode(ISD::SHL, DL, MVT::i32, Lane,
+                         DAG.getConstant(I * Bits, DL, MVT::i32));
+      Packed = DAG.getNode(ISD::OR, DL, MVT::i32, Packed, Lane);
+    }
+    return DAG.getBitcast(Op.getValueType(), Packed);
+  }
+
   switch (Op.getOpcode()) {
   default:
     reportFatalInternalError(
