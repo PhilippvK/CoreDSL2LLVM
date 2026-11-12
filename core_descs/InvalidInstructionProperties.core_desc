@@ -7,11 +7,14 @@
 // RUN: not pattern-gen %t.core_desc --skip-patterns -o %t.td 2>&1 | FileCheck %s --check-prefix=LOAD
 // RUN: sed 's/MAY_LOAD=1/llvm_instr/' %s > %t.core_desc
 // RUN: not pattern-gen %t.core_desc --skip-patterns -o %t.td 2>&1 | FileCheck %s --check-prefix=LLVM
+// RUN: sed 's/MAY_LOAD=1/unknown_property/' %s > %t.core_desc
+// RUN: pattern-gen %t.core_desc --skip-patterns -o %t.td 2>&1 | FileCheck %s --check-prefix=UNKNOWN
 
 // LOAD: may_load must be a boolean attribute without a value
 // STORE: may_store must be a boolean attribute without a value
 // EFFECT: has_side_effects must be a boolean attribute without a value
 // LLVM: llvm_instr must be a string
+// UNKNOWN: warning: unknown instruction attribute: unknown_property
 
 PG_INVALID [[MAY_LOAD=1]] {
     encoding: 7'd0 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
