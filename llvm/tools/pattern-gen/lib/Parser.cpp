@@ -6,6 +6,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
@@ -1252,7 +1253,7 @@ struct AttrValue {
 };
 
 using AttrMap = llvm::StringMap<AttrValue>;
-AttrMap ParseAttributes(TokenStream &ts) {
+AttrMap ParseAttributes(TokenStream &ts, bool single = false) {
   AttrMap attrs;
   while (ts.Peek().type == ABrOpen) {
     for (int i = 0; i < 2; i++)
@@ -1283,6 +1284,8 @@ AttrMap ParseAttributes(TokenStream &ts) {
 
     for (int i = 0; i < 2; i++)
       pop_cur(ts, ABrClose);
+    if (single)
+      break;
   }
   return attrs;
 
@@ -1347,14 +1350,28 @@ void ApplyInstructionAttributes(const AttrMap &attrs, CDSLInstr &instr,
         error("llvm_instr must be a string", ts);
       instr.llvm_instr = val.strVal;
     } else {
-      warning("unknown instruction attribute: " + name, ts);
+      auto property =
+          llvm::StringSwitch<std::optional<CDSLInstr::Property>>(name)
+              .Case("may_load", CDSLInstr::MAY_LOAD)
+              .Case("may_store", CDSLInstr::MAY_STORE)
+              .Case("has_side_effects", CDSLInstr::HAS_SIDE_EFFECTS)
+              .Default(std::nullopt);
+      if (property) {
+        if (val.kind != AttrValue::Bool)
+          error(name + " must be a boolean attribute without a value", ts);
+        instr.properties |= *property;
+      } else {
+        warning("unknown instruction attribute: " + name, ts);
+      }
     }
   }
 }
 
 void ParseInstructionAttributes(TokenStream &ts, CDSLInstr &instr) {
-  AttrMap attrs = ParseAttributes(ts);
-  ApplyInstructionAttributes(attrs, instr, ts);
+  while (ts.Peek().type == ABrOpen) {
+    AttrMap attrs = ParseAttributes(ts, true);
+    ApplyInstructionAttributes(attrs, instr, ts);
+  }
 }
 
 void ParseSetAttributes(TokenStream &ts) {
