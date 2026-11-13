@@ -11,6 +11,9 @@ multi-root extraction.
 - Explicit memory and register names remain supported by the LLVM 22 parser.
   A load feeding a register output or one memory store is a supported pattern
   root. The regression inputs cover 8-, 16-, 32-, and XLEN-bit memory operations.
+- Instructions may use the case-insensitive, valueless attributes `[[MAY_LOAD]]`,
+  `[[MAY_STORE]]`, and `[[HAS_SIDE_EFFECTS]]` to set the corresponding TableGen
+  fields to 1. Omitted properties leave those fields unchanged for inference.
 - `branch(condition);` emits a `brcond` pattern. Integer conditions mean
   nonzero, and comparison conditions retain their predicate. Declare the
   destination as `signed<13> offset [[is_branch_offs]]`; this operand denotes

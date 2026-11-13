@@ -1,0 +1,49 @@
+// RUN: pattern-gen %s --skip-patterns -o %t.td 2> %t.err
+// RUN: not grep "unknown instruction attribute" %t.err
+// RUN: FileCheck --check-prefix=FMT %s < %tInstrFormat.td
+
+// FMT-LABEL: class RVInst_PG_DEFAULT<
+// FMT-NOT: let {{(mayLoad|mayStore|hasSideEffects)}}
+// FMT-LABEL: class RVInst_PG_LOAD<
+// FMT-NEXT: let mayLoad = 1;
+// FMT-NOT: let {{(mayLoad|mayStore|hasSideEffects)}}
+// FMT-LABEL: class RVInst_PG_STORE<
+// FMT-NEXT: let mayStore = 1;
+// FMT-NOT: let {{(mayLoad|mayStore|hasSideEffects)}}
+// FMT-LABEL: class RVInst_PG_EFFECT<
+// FMT-NEXT: let hasSideEffects = 1;
+// FMT-NOT: let {{(mayLoad|mayStore|hasSideEffects)}}
+// FMT-LABEL: class RVInst_PG_RENAMED<
+// FMT-NEXT: let mayLoad = 1;
+// FMT-NEXT: let mayStore = 1;
+// FMT-NEXT: let hasSideEffects = 1;
+// FMT-NOT: let {{(mayLoad|mayStore|hasSideEffects)}}
+// FMT: }
+
+PG_DEFAULT {
+    encoding: 7'd0 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = X[rs1]; }
+}
+PG_LOAD [[MAY_LOAD]] {
+    encoding: 7'd1 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = X[rs1]; }
+}
+PG_STORE [[may_store]] {
+    encoding: 7'd2 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = X[rs1]; }
+}
+PG_EFFECT [[Has_Side_Effects]] {
+    encoding: 7'd3 :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}";
+    behavior: { X[rd] = X[rs1]; }
+}
+PG_COMBINED [[llvm_instr="PG_RENAMED"]] [[may_LOAD]] [[MAY_STORE]]
+            [[HAS_SIDE_EFFECTS]] {
+    operands: { unsigned<1> imm [[is_unroll_imm]]; }
+    encoding: 6'd0 :: imm[0:0] :: 5'b00000 :: rs1[4:0] :: 3'b000 :: rd[4:0] :: 7'b0001011;
+    assembly: "{name(rd)}, {name(rs1)}, {imm}";
+    behavior: { X[rd] = X[rs1] + imm; }
+}
