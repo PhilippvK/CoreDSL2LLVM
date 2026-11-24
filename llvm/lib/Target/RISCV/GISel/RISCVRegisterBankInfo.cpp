@@ -242,6 +242,25 @@ RISCVRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       &RISCV::ValueMappings[GPRSize == 64 ? RISCV::GPRB64Idx
                                           : RISCV::GPRB32Idx];
 
+  // A 32-bit packed vector occupies one GPR just like its scalar bitcast.
+  const auto &ST = static_cast<const RISCVSubtarget &>(STI);
+  if (ST.hasGPR32V() && !ST.is64Bit() &&
+      (Opc == TargetOpcode::G_BITCAST || Opc == TargetOpcode::G_ADD ||
+       Opc == TargetOpcode::G_SUB || Opc == TargetOpcode::G_AND ||
+       Opc == TargetOpcode::G_OR || Opc == TargetOpcode::G_XOR)) {
+    bool HasPackedOperand = false;
+    for (const MachineOperand &MO : MI.operands()) {
+      if (!MO.isReg() || !MO.getReg().isVirtual())
+        continue;
+      LLT Ty = MRI.getType(MO.getReg());
+      HasPackedOperand |= Ty == LLT::fixed_vector(4, 8) ||
+                          Ty == LLT::fixed_vector(2, 16);
+    }
+    if (HasPackedOperand)
+      return getInstructionMapping(DefaultMappingID, 1, GPRValueMapping,
+                                   NumOperands);
+  }
+
   switch (Opc) {
   case TargetOpcode::G_ADD:
   case TargetOpcode::G_SUB:

@@ -679,9 +679,9 @@ RISCVTTIImpl::getShuffleCost(TTI::ShuffleKind Kind, VectorType *DstTy,
   Kind = improveShuffleKindFromMask(Kind, Mask, SrcTy, Index, SubTp);
   std::pair<InstructionCost, MVT> LT = getTypeLegalizationCost(SrcTy);
 
-  if (ST->hasGPR32V()) {
-    return 1; // placeholder
-  }
+  if (ST->hasGPR32V() && !ST->hasVInstructions())
+    return BaseT::getShuffleCost(Kind, DstTy, SrcTy, Mask, CostKind, Index,
+                                 SubTp, Args, CxtI);
 
   // First, handle cases where having a fixed length vector enables us to
   // give a more accurate cost than falling back to generic scalable codegen.
@@ -993,6 +993,11 @@ InstructionCost RISCVTTIImpl::getScalarizationOverhead(
     ArrayRef<Value *> VL) const {
   if (isa<ScalableVectorType>(Ty))
     return InstructionCost::getInvalid();
+
+  // GPR32V has no RVV container type or vslide-based build-vector sequence.
+  if (ST->hasGPR32V() && !ST->hasVInstructions())
+    return BaseT::getScalarizationOverhead(Ty, DemandedElts, Insert, Extract,
+                                           CostKind, ForPoisonSrc, VL);
 
   // TODO: Add proper cost model for P extension fixed vectors (e.g., v4i16)
   // For now, skip all fixed vector cost analysis when P extension is available
@@ -2207,6 +2212,13 @@ InstructionCost RISCVTTIImpl::getMemoryOpCost(unsigned Opcode, Type *Src,
                                               TTI::OperandValueInfo OpInfo,
                                               const Instruction *I) const {
   EVT VT = TLI->getValueType(DL, Src, true);
+  // Packed memory uses a scalar word. Account for splitting unaligned
+  // transfers when the scalar target cannot execute them directly.
+  if (ST->hasGPR32V() && !ST->hasVInstructions() &&
+      (VT == MVT::v4i8 || VT == MVT::v2i16) && Alignment < Align(4) &&
+      !ST->enableUnalignedScalarMem())
+    return Alignment >= Align(2) ? 3 : 7;
+
   // Type legalization can't handle structs
   if (VT == MVT::Other || ST->hasGPR32V())
     return BaseT::getMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
@@ -2421,6 +2433,25 @@ InstructionCost RISCVTTIImpl::getVectorInstrCost(unsigned Opcode, Type *Val,
                                                  const Value *Op0,
                                                  const Value *Op1) const {
   assert(Val->isVectorTy() && "This must be a vector type");
+
+  // Estimate scalar packing/unpacking instructions; GPR32V has no RVV slides.
+  if (ST->hasGPR32V() && !ST->hasVInstructions() && isa<FixedVectorType>(Val)) {
+    auto *VT = cast<FixedVectorType>(Val);
+    if (VT->getPrimitiveSizeInBits() == 32 &&
+        (VT->getScalarSizeInBits() == 8 || VT->getScalarSizeInBits() == 16)) {
+      if (Opcode == Instruction::ExtractElement) {
+        if (Index == -1U)
+          return 4; // Compute shift, shift word, and isolate the lane.
+        unsigned Bits = VT->getScalarSizeInBits();
+        if (Index == VT->getNumElements() - 1)
+          return 1; // The top lane only needs a right shift.
+        return Bits == 8 && Index == 0 ? 1 : 2;
+      }
+      if (Opcode == Instruction::InsertElement)
+        return Index == -1U ? 10 : 6;
+    }
+    return BaseT::getVectorInstrCost(Opcode, Val, CostKind, Index, Op0, Op1);
+  }
 
   // TODO: Add proper cost model for P extension fixed vectors (e.g., v4i16)
   // For now, skip all fixed vector cost analysis when P extension is available

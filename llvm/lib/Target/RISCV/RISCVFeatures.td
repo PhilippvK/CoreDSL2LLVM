@@ -1041,9 +1041,14 @@ def HasStdExtSvinval : Predicate<"Subtarget->hasStdExtSvinval()">,
 def FeatureGPR32V
    : SubtargetFeature<"gpr32v", "HasGPR32V", "true", "Support SIMD in 32-bit GPRs">;
 def HasGPR32V
-   : Predicate<"Subtarget->hasGPR32V)">,
+   : Predicate<"Subtarget->hasGPR32V()">,
      AssemblerPredicate<(any_of FeatureGPR32V),
-                        "'GPR32V' (TODO)">;
+                        "'GPR32V' (Packed SIMD in 32-bit integer registers)">;
+// Representation is independent of the operations present in a generated ISA.
+def FeatureGPR32VAdd : SubtargetFeature<"gpr32v-add", "HasGPR32VAdd", "true",
+                                      "Packed byte/halfword addition">;
+def FeatureGPR32VSub : SubtargetFeature<"gpr32v-sub", "HasGPR32VSub", "true",
+                                      "Packed byte/halfword subtraction">;
 
 def FeatureStdExtSvnapot
     : RISCVExtension<1, 0, "NAPOT Translation Contiguity">;
@@ -1981,4 +1986,5 @@ def TuneSiFive7 : SubtargetFeature<"sifive7", "RISCVProcFamily", "SiFive7",
 
 def TuneVentanaVeyron : SubtargetFeature<"ventana-veyron", "RISCVProcFamily", "VentanaVeyron",
                                          "Ventana Veyron-Series processors">;
+
 

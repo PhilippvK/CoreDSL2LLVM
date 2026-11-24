@@ -1,0 +1,40 @@
+// RUN: pattern-gen %s --no-extend --riscv-xlen 32 --mattr=+m,+zbb -o %t32.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --riscv-xlen 64 --mattr=+m,+zbb -o %t64.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --riscv-xlen 32 --mattr=+m,+zbb --gisel-table -o %t32.td | FileCheck %s
+// RUN: pattern-gen %s --no-extend --riscv-xlen 64 --mattr=+m,+zbb --gisel-table -o %t64.td | FileCheck %s
+// CHECK: Pattern for PGT_NAND
+// CHECK: Pattern for PGT_ADD3
+// CHECK: Pattern for PGT_SUBINCACC
+// CHECK: Pattern for PGT_SHLI5
+// CHECK: Pattern for PGT_MAXU
+
+// Ordinary single-result patterns used to compare both PatternGen backends.
+InstructionSet XGISelTable extends RISCVBase {
+  instructions {
+    PGT_NAND {
+      encoding: 7'd0 :: rs2[4:0] :: rs1[4:0] :: 3'd0 :: rd[4:0] :: 7'b0001011;
+      assembly: {"pgt.nand", "{name(rd)}, {name(rs1)}, {name(rs2)}"};
+      behavior: if (rd != 0) X[rd] = ~(X[rs1] & X[rs2]);
+    }
+    PGT_ADD3 {
+      encoding: 2'd1 :: rs3[4:0] :: rs2[4:0] :: rs1[4:0] :: 3'd0 :: rd[4:0] :: 7'b0001011;
+      assembly: {"pgt.add3", "{name(rd)}, {name(rs1)}, {name(rs2)}, {name(rs3)}"};
+      behavior: if (rd != 0) X[rd] = X[rs1] + X[rs2] + X[rs3];
+    }
+    PGT_SUBINCACC {
+      encoding: 7'd2 :: rs2[4:0] :: rs1[4:0] :: 3'd0 :: rd[4:0] :: 7'b0001011;
+      assembly: {"pgt.subincacc", "{name(rd)}, {name(rs1)}, {name(rs2)}"};
+      behavior: if (rd != 0) X[rd] += X[rs1] - X[rs2] + 1;
+    }
+    PGT_SHLI5 {
+      encoding: 7'd3 :: amount[4:0] :: rs1[4:0] :: 3'd0 :: rd[4:0] :: 7'b0001011;
+      assembly: {"pgt.shli5", "{name(rd)}, {name(rs1)}, {amount}"};
+      behavior: if (rd != 0) X[rd] = X[rs1] << amount;
+    }
+    PGT_MAXU {
+      encoding: 7'd4 :: rs2[4:0] :: rs1[4:0] :: 3'd0 :: rd[4:0] :: 7'b0001011;
+      assembly: {"pgt.maxu", "{name(rd)}, {name(rs1)}, {name(rs2)}"};
+      behavior: if (rd != 0) X[rd] = X[rs1] > X[rs2] ? X[rs1] : X[rs2];
+    }
+  }
+}

@@ -19,6 +19,7 @@
 #include "llvm/ADT/Bitset.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/CodeGen/GlobalISel/Utils.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -115,6 +116,8 @@ enum {
   /// - OpIdx(ULEB128) - Operand index
   GIM_RecordInsn,
   GIM_RecordInsnIgnoreCopies,
+
+  GIM_RecordExactOtherUseInsn,
 
   /// Check the feature bits
   ///   Feature(2) - Expected features
@@ -306,6 +309,11 @@ enum {
   /// be folded into the root (inst 0).
   /// - Num(1)
   GIM_CheckIsSafeToFold,
+
+  /// Checks if the matched instructions numbered [1, 1+N) can
+  /// be moved into the root (inst 0). (
+  /// - Num(1)
+  GIM_CheckIsSafeToMove,
 
   /// Check the specified operands are identical.
   /// The IgnoreCopies variant looks through COPY instructions before
@@ -550,6 +558,8 @@ enum {
   /// result.
   GIR_MergeMemOperands,
 
+  GIR_MarkEraseFromParent,
+
   /// Erase from parent.
   /// - InsnID(ULEB128) - Instruction ID to erase
   GIR_EraseFromParent,
@@ -594,6 +604,15 @@ class GIMatchTableExecutor {
 public:
   virtual ~GIMatchTableExecutor() = default;
 
+  /// A multi-root match can consume instructions the selection walk has yet
+  /// to visit. Keep their erasure separate from semantic MachineInstr flags.
+  bool isPendingErase(const MachineInstr &MI) const {
+    return PendingErase.contains(&MI);
+  }
+  bool takePendingErase(const MachineInstr &MI) {
+    return PendingErase.erase(&MI);
+  }
+
   CodeGenCoverage *CoverageInfo = nullptr;
   GISelValueTracking *VT = nullptr;
   MachineFunction *MF = nullptr;
@@ -609,6 +628,7 @@ public:
                        CodeGenCoverage *covinfo = nullptr,
                        ProfileSummaryInfo *psi = nullptr,
                        BlockFrequencyInfo *bfi = nullptr) {
+    PendingErase.clear();
     CoverageInfo = covinfo;
     VT = vt;
     MF = &mf;
@@ -619,6 +639,7 @@ public:
   }
 
 protected:
+  mutable SmallPtrSet<const MachineInstr *, 8> PendingErase;
   using ComplexRendererFns =
       std::optional<SmallVector<std::function<void(MachineInstrBuilder &)>, 4>>;
   using RecordedMIVector = SmallVector<MachineInstr *, 4>;
@@ -743,6 +764,12 @@ protected:
   /// preceed IntoMI.
   LLVM_ABI bool isObviouslySafeToFold(MachineInstr &MI,
                                       MachineInstr &IntoMI) const;
+
+  /// Returns true if MI can be moved into IntoMI while respecting dependencies
+  /// and side effects. Strict version of isObviouslySafeToFold.
+  bool isSafeToMove(MachineRegisterInfo &MRI, MachineInstr &MI,
+                    MachineInstr &IntoMI,
+                    ArrayRef<MachineInstr *> OthersToMerge) const;
 
   template <typename Ty> static Ty readBytesAs(const uint8_t *MatchTable) {
     Ty Ret;

@@ -39,15 +39,19 @@
 #include "Common/GlobalISel/GlobalISelMatchTableExecutorEmitter.h"
 #include "Common/InfoByHwMode.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/CodeGen/GlobalISel/GIMatchTableExecutor.h"
 #include "llvm/CodeGenTypes/LowLevelType.h"
 #include "llvm/CodeGenTypes/MachineValueType.h"
 #include "llvm/Support/CodeGenCoverage.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/SMLoc.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
+#include <initializer_list>
 #include <string>
 
 using namespace llvm;
@@ -2462,6 +2466,45 @@ void GlobalISelEmitter::run(raw_ostream &OS) {
           .str(),
       OS);
   std::vector<RuleMatcher> Rules;
+  std::vector<SMLoc> Locs = {};
+
+  if (Target.getName() == "RISCV") {
+
+    auto &RecClasses = Target.getRegBank().getRegClasses();
+    auto GPRIt = std::find_if(
+        RecClasses.begin(), RecClasses.end(),
+        [](CodeGenRegisterClass &RC) { return RC.getName() == "GPR"; });
+    assert(GPRIt != RecClasses.end() && "no GPR reg class");
+    [[maybe_unused]] CodeGenRegisterClass &GPR = *GPRIt;
+
+    [[maybe_unused]] auto PGImmPredicate = [&](StringRef Name) {
+      const Record *Imm = RK.getDef(Name);
+      if (!Imm && Name == "simm12")
+        Imm = RK.getDef("simm12_lo");
+      TreePattern *Fragment = Imm ? CGP.getPatternFragmentIfRead(Imm) : nullptr;
+      if (!Fragment)
+        PrintFatalError("Missing PatternGen immediate predicate: " + Name);
+      return Fragment;
+    };
+
+    // Include PatternGen-generated inc files here!
+    // GlobalISelEmitter.cpp - gisel_table - INSERTION_START
+// GlobalISelEmitter.cpp - gisel_table - INSERTION_END
+
+#ifdef PATTERNGEN_GISEL_TABLES
+#include PATTERNGEN_GISEL_TABLES
+#elif defined(USE_GENERATED_TABLES)
+#include "PatternGenTables.inc"
+#endif  // USE_GENERATED_TABLES
+  }
+  // Direct matchers bypass importRulePredicates; register their feature bits
+  // even when no ordinary Pat references the custom extension.
+  for (const auto &Rule : Rules)
+    for (const Record *Feature : Rule.getRequiredFeatures()) {
+      if (!Feature)
+        PrintFatalError("Unknown predicate in a PatternGen matcher");
+      declareSubtargetFeature(Feature);
+    }
   // Look through the SelectionDAG patterns we found, possibly emitting some.
   for (const PatternToMatch &Pat : CGP.ptms()) {
     ++NumPatternTotal;
@@ -2520,8 +2563,8 @@ void GlobalISelEmitter::run(raw_ostream &OS) {
   CustomRendererFns.erase(llvm::unique(CustomRendererFns),
                           CustomRendererFns.end());
 
-  // Create a table containing the LLT objects needed by the matcher and an enum
-  // for the matcher to reference them with.
+  // Create a table containing the LLT objects needed by the matcher and an
+  // enum for the matcher to reference them with.
   std::vector<LLTCodeGen> TypeObjects;
   append_range(TypeObjects, KnownTypes);
   llvm::sort(TypeObjects);

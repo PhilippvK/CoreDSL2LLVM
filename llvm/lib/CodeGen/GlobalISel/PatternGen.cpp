@@ -82,6 +82,7 @@ static const std::string CoveragePrefix;
 #endif
 
 std::ostream *PatternGenArgs::OutStream = nullptr;
+std::ostream *PatternGenArgs::OutStreamGISelTable = nullptr;
 std::vector<CDSLInstr> const *PatternGenArgs::Instrs = nullptr;
 PGArgsStruct PatternGenArgs::Args;
 bool PatternGenArgs::Failed = false;
@@ -1532,6 +1533,8 @@ static PatternOrError generatePattern(MachineFunction &MF) {
 }
 
 bool PatternGen::runOnMachineFunction(MachineFunction &MF) {
+  if (PatternGenArgs::Args.GISelTableBackend)
+    return runGISelTable(MF);
 
   bool Generated = false;
   auto Cleanup = make_scope_exit([&] {

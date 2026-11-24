@@ -1570,6 +1570,13 @@ void RISCVInstructionSelector::renderAddiPairImmLarge(MachineInstrBuilder &MIB,
 const TargetRegisterClass *RISCVInstructionSelector::getRegClassForTypeOnBank(
     LLT Ty, const RegisterBank &RB) const {
   if (RB.getID() == RISCV::GPRBRegBankID) {
+    if (STI.hasGPR32V() && !STI.is64Bit()) {
+      if (Ty == LLT::fixed_vector(4, 8))
+        return &RISCV::GPR32V4RegClass;
+      if (Ty == LLT::fixed_vector(2, 16))
+        return &RISCV::GPR32V2RegClass;
+    }
+
     if (Ty.getSizeInBits() <= 32 || (STI.is64Bit() && Ty.getSizeInBits() == 64))
       return &RISCV::GPRRegClass;
   }
