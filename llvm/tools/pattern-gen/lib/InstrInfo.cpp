@@ -16,6 +16,13 @@ std::string EncodingToTablgen(CDSLInstr const &instr) {
     << " : " << base << "<outs, ins, \"" << instr.mnemonic << "\", \""
     << instr.argString << "\", [], InstFormatOther> {\n";
 
+  if (instr.hasProperty(CDSLInstr::MAY_LOAD))
+    s << "\tlet mayLoad = 1;\n";
+  if (instr.hasProperty(CDSLInstr::MAY_STORE))
+    s << "\tlet mayStore = 1;\n";
+  if (instr.hasProperty(CDSLInstr::HAS_SIDE_EFFECTS))
+    s << "\tlet hasSideEffects = 1;\n";
+
   for (auto const &f : instr.fields)
     if (f.type & (CDSLInstr::FieldType::NON_CONST)) {
       int len = f.len;

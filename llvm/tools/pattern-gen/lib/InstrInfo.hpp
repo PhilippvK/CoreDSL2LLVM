@@ -11,6 +11,17 @@
 #include <vector>
 
 struct CDSLInstr {
+  enum Property : uint32_t {
+    MAY_LOAD = 1u << 0,
+    MAY_STORE = 1u << 1,
+    HAS_SIDE_EFFECTS = 1u << 2,
+  };
+
+  uint32_t properties = 0;
+  bool hasProperty(Property property) const {
+    return (properties & property) != 0;
+  }
+
   struct FieldFrag {
     uint8_t idx; // index into Field array
     uint8_t len;
